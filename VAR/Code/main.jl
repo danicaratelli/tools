@@ -20,7 +20,7 @@ out_path = joinpath(root,"Outdata");
 data_path = joinpath(root,"Data");
 
 ## Packages used ##
-using DataFrames, PyPlot, Dates, Distributions
+using DataFrames, PyPlot, Dates, Distributions, FredData
 
 cd(code_path);
 include("options.jl");

@@ -1,0 +1,23 @@
+function forecast(M::model,h::Int64)
+    n = size(M.fits,2); #number of variables
+    T = size(M.fits,1); #number of periods
+    p = M.lags;
+    B = M.coeff; #model coefficients
+    C = [B[1,:]' zeros(1,n*(p-1))]'; #constant
+    A = zeros(n*p,n*p);
+    A[1:n,:] = B[2:end,:]';
+    A[n+1:end,1:n*(p-1)] = eye(n*(p-1));
+
+    A_tmp = eye(size(A,1),size(A,2));
+    for i=1:h-1;
+        A_tmp = A_tmp+(A)^i;
+    end
+
+
+    KKK = M.Y[end-p+1:end,:]';
+    
+    ### WHAT AM I DOING HERE?????????
+    reshape(flipdim(KKK,2),n*p,1)
+    
+    return (A^h)*reshape(M.Y[end-p+1:end,:]',n*p,1) + A_tmp*C;
+end

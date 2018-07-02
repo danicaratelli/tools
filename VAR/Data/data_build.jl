@@ -1,7 +1,6 @@
-using FredData
 n = length(Var_names);
-start_date = "1960-01-01";
-end_date = "2009-01-01";
+start_date = "2000-01-01";
+end_date = "2016-10-01";
 #fetching data
 f = Fred("4f9f790c74d8b1e1f808400bc343fbe3")
 Data = DataFrame();

@@ -3,7 +3,7 @@ using Dates, FredData, Distributions
 FRED_API_key = "4f9f790c74d8b1e1f808400bc343fbe3"; #St. Louis Fed Alfred jey
 start_date = "2000-01-01";
 end_date = "2016-12-01";
-f = Fred();
+f = Fred(FRED_API_key);
 
 GDP = get_data(f,"GDPC1",vintage_dates=today(),observation_start=start_date,observation_end=end_date,units="pca");
 

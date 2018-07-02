@@ -22,9 +22,9 @@ Var_names = ["GDP","Inflation","Interest Rate"];
 
 dates_mnems = "date";               #Date mnemonic
 
-Transformations = ["log",
-                   "log",
-                   "lin];   		#Transformations applied,
+Transformations = ["lin",
+                   "lin",
+                   "lin"];   		#Transformations applied,
                                        #if you want to add 
 							#transformations, 
                                        #change the 										#"Data_organizer.jl" accordingly

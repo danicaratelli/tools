@@ -10,7 +10,7 @@ fprintf(fileID,'%s\n', '\begin{figure}[t]');
 fprintf(fileID,'%s\n','\begin{center}');
 fprintf(fileID,'%s\n','\begin{tikzpicture}[scale=0.7, transform shape]');
 fprintf(fileID,'%s\n','\pgfplotsset{every tick label/.append style={font=\Large}};');
-fprintf(fileID,'%s\n',['\begin{groupplot}[group style={group name=allgraphs, group size= ' num2str(cs) ' by ' num2str(cs) ', vertical sep=3cm, horizontal sep=2.5cm}];']);
+fprintf(fileID,'%s\n',['\begin{groupplot}[group style={group name=allgraphs, group size= ' num2str(cs) ' by ' num2str(rs) ', vertical sep=3cm, horizontal sep=2.5cm}];']);
 %individual plots
 for i=1:num_plots
     A = F{i}; %ith figure
@@ -46,4 +46,3 @@ fprintf(fileID,'%s\n','\end{figure}');
 fclose(fileID);
 
 end
-

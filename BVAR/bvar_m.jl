@@ -1,6 +1,10 @@
 function bvar_m(data::Array{Float64,2},p::Int64,λ::Number,D::Array{Int64,1})
-    n = size(data,2);
-    T = size(data,1);
+    T, n = size(data);
+
+    S = ar_reg(data,p);
+    #organize Y (LHS of regression)
+    Y = data[p+1:end,:];
+
     #organize Y (LHS of regression)
     Y = data[p+1:end,:];
     
@@ -9,12 +13,9 @@ function bvar_m(data::Array{Float64,2},p::Int64,λ::Number,D::Array{Int64,1})
     for i=1:p;
         X[:,(i-1)*n+1:i*n] = data[end-T+p-i+1:end-i,:];
     end
-    X = [X ones(size(X,1),1)]; 
-    
-    ## Augmenting data with dummy data (to match prior)
-
-    S = ar_reg(Y,p);
-    #creting dummy data
+    X = [X ones(size(X,1),1)];  
+  
+        #creting dummy data
     Y_d = [diagm((D.*S)[:])./λ;
            zeros(n*(p-1),n);
            diagm(S);
@@ -34,7 +35,7 @@ function bvar_m(data::Array{Float64,2},p::Int64,λ::Number,D::Array{Int64,1})
     #fitted values
     fits = X_star*B;
 
-    BVAR_model = model(B,Σ,fits,p,Y_star,X_star);
+    BVAR_model = model(B,Σ,fits,p,Y_star,X_star,T,n);
     
     return BVAR_model;
 end

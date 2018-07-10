@@ -1,0 +1,16 @@
+function irf_jl(M::model,h::Int64,K::Int64)
+    T = M.T;
+    n = M.n;
+    Y = M.Y[1:T-p,:];
+    X = M.X[1:T-p,:];
+    iW = InverseWishart(n+n*(p-1)+2+2+T-(n*p+1),BVAR_model.variance);
+    PSIs = rand(iW,K);
+    for k=1:K
+        PSI = PSIs[k];
+        B = chol(PSI)';
+        D = diagm(diag(PSI));
+        C = B*inv(D^(1/2));
+        Sig = Symmetric(kron(PSI,inv(BVAR_model.X'*BVAR_model.X)));
+        knorm = MvNormal(vec(BVAR_model.coeff),convert(Array{Float64,2},Sig));
+    end
+end

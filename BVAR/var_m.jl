@@ -19,6 +19,6 @@ function var_m(data::Array{Float64,2},p::Int64)
     #fitted values
     fits = X*B;
 
-    M = model(B,Σ,fits,p,Y,X);
+    M = model(B,Σ,fits,p,Y,X,T,n);
     return M;
 end

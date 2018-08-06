@@ -1,8 +1,7 @@
-using  CSV, DataFrames, Dates, Distributions
-
+using  CSV, DataFrames, Dates, Distributions, PyPlot
 
 ## Options
-λ = 1/15.4564;
+λ = Inf;
 ϵ = 0.00001;
 D = [1 1 1];
 p = 13;
@@ -12,6 +11,7 @@ include("help_funcs.jl");
 include("bvar_m.jl");
 include("var_m.jl");
 include("forecast.jl");
+include("irf.jl");
 
 
 #load data
@@ -22,16 +22,13 @@ Data[:Inflation] = log.(Data[:Inflation])*100;
 
 data_full = convert(Array{Float64,2},Data[:,2:end]);
 
-data = data_full[38:end-12,:];
+data = data_full[25:528,:];
 #running Bayesian VAR
-BVAR_model = bvar_m(data,p,λ,D[:]); 
+
+BVAR_model = bvar_m(data,p,λ,D[:]);
 #running VAR
 VAR_model = var_m(data,p);
 
-#forecasting models h periods ahead
-bYh = forecast(BVAR_model,1);
-Yh = forecast(VAR_model,2);
-
-
-
-K = 10_000;
+K = 300;
+irf_, irf_high, irf_low = irf(BVAR_model,48,λ,D[:],1)
+irf, irf_high, irf_low, irf_med = irf(VAR_model,48,λ,D[:],1)

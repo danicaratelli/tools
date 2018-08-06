@@ -5,12 +5,19 @@ type model
     lags::Int64;
     Y::Array{Float64,2};
     X::Array{Float64,2};
+    data::Array{Float64,2};
     T::Int64;
     n::Int64;
 end
 
+type irf_st
+    median::DataFrame;
+    qnt_high::DataFrame;
+    qnt_low::DataFrame;
+end
+
 #1st estimate the variance of residuals from AR(p) for each variable
-function ar_reg(Y,p)    
+function ar_reg(Y,p)
     T, n = size(Y);
     S = zeros(n);
     for i=1:n
@@ -19,10 +26,11 @@ function ar_reg(Y,p)
         for j=1:p
             yy[:,j] = Y[p+1-j:end-j,i];
         end
+        yy = [yy ones(size(yy,1),1)]
         b = yy\y;
         y_hat = yy*b;
         eps = y.-y_hat;
-        S[i] = sqrt.((eps'*eps)/(T-n-p));
+        S[i] = sqrt.((eps'*eps)/(T-2p-1));
     end
     return S;
 end

@@ -1,27 +1,33 @@
-function irf(M::model,h::Int64,λ,D,b=0,K=200,bw=68)
-    T = copy(M.T);
+function irf(mod::model,h::Int64,λ,D,v_type,b=0,K=200,bw=68)
+    M = copy(mod);
+    T = M.T;
     n = M.n;
     p = M.lags;
-    #Y = M.Y[1:T-p,:];
-    #X = M.X[1:T-p,:];
-    data = copy(M.data);
+    data = M.data;
+
     k=1;
     d=MvNormal(zeros(n),M.variance);
-    Y_original = copy(M.Y);
     if b!=0
         IRFs = zeros(h+1,n,n,K);
-        Y_out = zeros(T,n);
+        YY = zeros(T,n,K);
         while k<=K
-            Y_out[1:p,:] = M.data[1:p,:];
+            Y_out = zeros(T,n);
+            Y_out[1:p,:] = data[1:p,:];
+            M_t = copy(M);
             for t=p+1:T
-                M_t = M;
                 E = rand(d,1);
-                Y_in = Y_out[t-p:t-1,:];
+                Y_in = Y_out[1:t-1,:];
                 M_t.Y = Y_in;
                 fore_t = forecast(M_t,1);
                 Y_out[t,:] = fore_t.+E;
             end
-            M_tmp = bvar_m(Y_out,p,λ,D[:]);
+
+            YY[:,:,k] = Y_out;
+            if v_type == "bvar"
+                M_tmp = bvar_m(Y_out,p,λ,D[:]);
+            else
+                M_tmp = var_m(Y_out,p);
+            end
             IRFs[:,:,:,k] = irf_help(M_tmp,h);
             k = k+1;
         end
@@ -39,13 +45,12 @@ function irf(M::model,h::Int64,λ,D,b=0,K=200,bw=68)
         end
     else
         qnt_high = zeros(h+1,n,n);
-        qnt_med = zeros(h+1,n,n);
+        mod_new = var_m(data[p+1:end,:],p);
+        qnt_med = medians = irf_help(mod_new,h);
         qnt_low = zeros(h+1,n,n);
     end
-    #M.Y = Y_original[1:T,:];
-    medians = irf_help(M,h);
 
-    return medians, qnt_high, qnt_low, qnt_med;
+    return qnt_high, qnt_med, qnt_low;
 end
 
 function irf_help(M::model,h::Int64)
@@ -54,7 +59,6 @@ function irf_help(M::model,h::Int64)
     p = M.lags;
 
     B = M.coeff; #model coefficients
-    C = [B[end,:]' zeros(1,n*(p-1))]'; #constant
     A = zeros(n*p,n*p);
     A[1:n,:] = B[1:end-1,:]';
     A[n+1:end,1:n*(p-1)] = eye(n*(p-1));

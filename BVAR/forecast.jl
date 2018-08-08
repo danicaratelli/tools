@@ -9,7 +9,7 @@ function forecast(M::model,h::Int64)
     A[n+1:end,1:n*(p-1)] = eye(n*(p-1));
 
     A_tmp = eye(size(A,1),size(A,2));
-    for i=1:h-1;
+    for i=1:h-1
         A_tmp = A_tmp+(A)^i;
     end
 

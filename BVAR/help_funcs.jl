@@ -9,6 +9,10 @@ type model
     T::Int64;
     n::Int64;
 end
+import Base.copy
+Base.copy(m::model) = model(copy(m.coeff), copy(m.variance), copy(m.fits),
+                            copy(m.lags), copy(m.Y), copy(m.X), copy(m.data),
+                            copy(m.T), copy(m.n))
 
 type irf_st
     median::DataFrame;

@@ -15,7 +15,7 @@ function var_m(data::Array{Float64,2},p::Int64)
     #estimated parameters of VAR
     B = inv(X'*X)*X'*Y;
     #estimated variance-covariance matrix
-    Σ = (Y-X*B)'*(Y-X*B)/size(Y,1);;
+    Σ = (Y-X*B)'*(Y-X*B)/size(Y,1);
     #fitted values
     fits = X*B;
 

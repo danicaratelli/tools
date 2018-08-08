@@ -30,5 +30,6 @@ BVAR_model = bvar_m(data,p,λ,D[:]);
 VAR_model = var_m(data,p);
 
 K = 300;
-irf_, irf_high, irf_low = irf(BVAR_model,48,λ,D[:],1)
-irf, irf_high, irf_low, irf_med = irf(VAR_model,48,λ,D[:],1)
+#irf_, irf_high, irf_low = irf(BVAR_model,48,λ,D[:],1)
+irf_high, irf_low, irf_med = irf(VAR_model,48,λ,D[:],"var",1);
+irf_high, irf_low, irf_med = irf(BVAR_model,48,λ,D[:],"bvar",1);

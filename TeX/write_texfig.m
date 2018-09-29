@@ -13,7 +13,7 @@ fprintf(fileID,'%s\n',['\pgfplotsset{every tick label/.append style={font=' font
 fprintf(fileID,'%s\n',['\pgfplotsset{y tick label style={  font=' fontsz ', /pgf/number format/precision=3,/pgf/number format/fixed}};']);
 fprintf(fileID,'%s\n',['\pgfplotsset{y label style={  font=' fontsz '}};']);
 fprintf(fileID,'%s\n',['\pgfplotsset{x label style={  font=' fontsz '}};']);
-fprintf(fileID,'%s\n',['\begin{groupplot}[group style={group name=allgraphs, group size= ' num2str(cs) ' by ' num2str(cs) ', vertical sep=3cm, horizontal sep=2.5cm}];']);
+fprintf(fileID,'%s\n',['\begin{groupplot}[group style={group name=allgraphs, group size= ' num2str(cs) ' by ' num2str(cs) ', vertical sep=3cm, horizontal sep=2.5cm}, height = ' num2str(specs.height) 'cm, width = ' num2str(specs.width) 'cm];']);
 %individual plots
 for i=1:num_plots
     A = F{i}; %ith figure

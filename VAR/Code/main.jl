@@ -4,7 +4,7 @@
 
 #description: We estimate a VAR for " yₜ = c + Ψ₁yₜ₋₁ + ... + Ψₚyₜ₋ₚ + ϵ "
 #             where ϵ ∼ N(0,Σ)
-#             We spit out Impulse Response functions for a 1σ shock to a variable 
+#             We spit out Impulse Response functions for a 1σ shock to a variable
 
 
 
@@ -104,14 +104,14 @@ for kk=1:ndraws;
     β_temp = var_res["coeff"]; Var_temp = var_res["var"];
     B[:,:,kk] = β_temp; V[:,:,kk] = Var_temp;
     IRFs[:,:,:,kk] = imp_res(β_temp,Var_temp,S,nperiods,1);
-    IRFs[:,:,:,kk] = IRFs[:,:,:,kk].*(1/IRFs[1,4,4,kk]);
+    IRFs[:,:,:,kk] = IRFs[:,:,:,kk];
 end
 
 for s = 1:n;
     for r = 1:n;
         #percentiles of the computed IRFs
         IRF_conf = zeros(nperiods,3); #the standard errors of the bootstrapping
-        
+
         for k=1:nperiods;
             set = reshape(IRFs[k,r,s,:],ndraws);
             set_sort = sort(set,1);

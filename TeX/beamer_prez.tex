@@ -1,0 +1,83 @@
+% Document Preamble
+
+%  Must be compiled with pdf Latex
+
+\documentclass[12pt,aspectratio=169]{beamer}
+%\documentclass[12pt,handout]{beamer} % If you want to print handouts
+
+
+
+% Changing the fonts: this will make the slides more readable and the math look like regular tex math
+\usefonttheme{serif}
+\usepackage{tikz}
+\usepackage{bm}
+\usepackage{appendixnumberbeamer}
+\usepackage{pgfpages}
+%% If want to include notes on the side:
+%\setbeameroption{show notes on second screen=right} % include both notes and text
+%\setbeamertemplate{note page}{\pagecolor{yellow!5}\insertnote}\usepackage{palatino} % only show notes
+% Titles will appear in Small Cap Serif
+\usefonttheme{structuresmallcapsserif}
+
+% -----------------------------------------
+% Color Definition
+% -----------------------------------------
+
+\definecolor{blue}{rgb}{0.4471,0.55765,0.7961} %light blue
+
+% -----------------------------------------
+% Center the Frame Title
+% -----------------------------------------
+
+\setbeamertemplate{frametitle} {
+\begin{centering}
+\vspace{0.1in} \insertframetitle
+\par
+\end{centering}}
+
+
+% -----------------------------------------
+% Setting elements' colors
+% -----------------------------------------
+
+\setbeamercolor*{item}{fg=blue}
+\setbeamercolor{frametitle}{fg=blue,bg=blue}
+\setbeamercolor{title}{fg=blue}
+\setbeamertemplate{enumerate items}{$\blacktriangleright$}
+\setbeamertemplate{enumerate subitems}{$\blacktriangleright$}
+\newtheorem{proposition}[theorem]{\textcolor{blue}{Proposition}}
+% -----------------------------------------
+% Number the slides
+% -----------------------------------------
+
+\setbeamertemplate{footline}[frame number]
+
+% -----------------------------------------
+% Get rid of the irritating navigation bar
+% -----------------------------------------
+
+\setbeamertemplate{navigation symbols}{}
+
+% -----------------------------------------
+% Begin Document
+% -----------------------------------------
+
+\title{Title}
+\date{\today}
+\author{name}
+
+\begin{document}
+
+\maketitle
+
+%  I separate each slide with a line:
+
+\begin{frame}{Slide 1}
+Include text here
+\begin{enumerate}
+	\item \textcolor{blue}{theme 1:} insert text \vspace*{0.5em}
+	\item \textcolor{blue}{theme 2:} insert text\vspace*{0.5em}
+\end{enumerate}\vspace*{1em}
+\end{frame}
+
+\end{document}

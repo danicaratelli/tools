@@ -25,19 +25,19 @@ K0 = 5;
 tau0 = 0.3;
 
 #other parameters:
-params = Dict();
-params["β"] = 0.98;     #discount factor
-params["α"] = 1/3;      #capital share
-params["δ"] = 0.025;    #depreciation rate
-params["η"] = 2;        #risk aversion parameter
-params["b"] = 0.5;      #home production
+param = Dict();
+param["β"] = 0.98;     #discount factor
+param["α"] = 1/3;      #capital share
+param["δ"] = 0.025;    #depreciation rate
+param["η"] = 2;        #risk aversion parameter
+param["b"] = 0.5;      #home production
 
 #Asset grid
-N = 10000;
-params["N"] = N;
+N = 1000;
+param["N"] = N;
 amin = -2;
-amax = 3000;
+amax = 100;
 a_grid = exp.(collect(range(log(1e-4),stop=log(amax-amin),length=N))) + amin;
-params["a_grid"] = a_grid;
+param["a_grid"] = a_grid;
 
-K0 = 250; tau0 = 0.3;
+K0 = 20; tau0 = 0;

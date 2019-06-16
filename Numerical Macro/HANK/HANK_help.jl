@@ -6,10 +6,8 @@
 function solveHANK(K0::Number,tau0::Number,Tran::Array{Float64,2},params::Dict)
 
     #loading parameter values
-    β = params["β"];
-    α = params["α"];
-    δ = params["δ"];
-    η = params["η"];
+    α = param["α"];
+    δ = param["δ"];
 
     #step 1:
         #compute stationary employment L
@@ -19,17 +17,22 @@ function solveHANK(K0::Number,tau0::Number,Tran::Array{Float64,2},params::Dict)
     #step 2:
         #compute the wage w and the interest rate r based on guesses for capital
         #stock K
+    K0 = 15
     w = (1-α)*(K0/L)^(α);
     r = α*(L/K0)^(1-α) - δ;
 
     #step 3:
         #solving HH's problem
-    @time cpol, apol = HHegm(params,tau0,w,r,Tran);
+    cpol, apol = HHegm(param,tau0,w,r,Tran);
 
     #step 4:
         #computing the stationary distribution of assets via simulation
-    #defining a new finer grid
-    Fdist = ones(NN,2)./(2*NN);
+    Fdist = simul_dist(apol,N,a_grid,Tran);
+
+    #step 5:
+        #aggregate capital and taxes
+    Kstar = sum(Fdist.*[a_grid a_grid]);
+    println(Kstar);
 end
 
 
@@ -49,13 +52,13 @@ function HHegm(params::Dict,τ::Number,w::Number,r::Number,Tran::Array{Float64,2
     println("Starting EGM...")
 
     #loading parameter values
-    β = params["β"];
-    α = params["α"];
-    δ = params["δ"];
-    η = params["η"];
-    N = params["N"];
-    b = params["b"];
-    a_grid = params["a_grid"];
+    β = param["β"];
+    α = param["α"];
+    δ = param["δ"];
+    η = param["η"];
+    N = param["N"];
+    b = param["b"];
+    a_grid = param["a_grid"];
 
     dist = Inf;
     iter = 0;
@@ -103,7 +106,7 @@ end
 
 
 
-function simul_dist(apol,N,a_grid)
+function simul_dist(apol::Array{Float64,2},N::Int64,a_grid::Array{Float64,1},Tran::Array{Float64,2},tol=1e-10,maxiter=1000)
 
     #finding the policy for assets in index form
     apol_idx = Int.(zeros(apol));
@@ -123,62 +126,64 @@ function simul_dist(apol,N,a_grid)
         end
     end
 
-    K = 1000;
-    eps_rand = rand(K,2);
-    Fdist = ones(NN,2)./(2*NN);
+    #K = maxiter;
+    #eps_rand = rand(K,N,2);
+    Fdist = ones(N,2)./(2*N);
+    dist = Inf;
+    it = 0;
+    while dist>tol && it<maxiter
+        Fdist_new = zeros(N,2);
+        for m=1:2
+            us = unique(apol_idx[:,m],dims=1)
+            for j=1:length(us)
+               sumj = sum(Fdist[apol_idx[:,m].==us[j],m]);
+                for mm = 1:2
+                    Fdist_new[us[j],mm] = Fdist_new[us[j],mm] + Tran[m,mm]*sumj;#sum(Φold[locsj,m]);
+                end
+            end
+        end
+        dist = maximum(abs.(Fdist_new.-Fdist));
+        Fdist = copy(Fdist_new);
+        it +=1;
+    end
+    return Fdist;
 end
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function invapol(apol,a_grid)
+#=
+function invapol(apol,a_grid,N)
     amin = a_grid[1]; #borrowing limit
 
     #constructing finer version of grid
-    a_grid_mid = mean([a_grid[2:end] a_grid[1:end-1]],dims=2);
-    a_grid_fine = sort([a_grid;a_grid_mid],dims=1);
-    N = length(a_grid_fine);
+    #a_grid_mid = mean([a_grid[2:end] a_grid[1:end-1]],dims=2);
+    #a_grid_fine = sort([a_grid;a_grid_mid],dims=1);
+    #NN = length(a_grid_fine);
 
     apol_inv = zeros(N,2);
-    #filling in for those at borrowing constraint
-    last_con = findlast(apol[:,m].<=amin);
-    if !isempty(last_con)
-        apol_inv[1,m] = a_grid[last_con];
-    else
-        last_con = 0;
+    apol_inv_idx = Int.(zeros(N,2));
+    for m=1:2
+        #filling in for those at borrowing constraint
+        last_con = findlast(apol[:,m].<=amin);
+        if last_con==nothing
+            apol_inv[1,m] = a_grid[last_con];
+            apol_inv_idx[1,m] = last_con;
+        else
+            last_con = 0;
+        end
+
+        #interpolating over monotone region
+        for n=2:N
+            ll = findlast(apol[:,m].<=a_grid[n]);
+            if ll<N
+                ww = (apol[ll+1,m] - a_grid[n])/(apol[ll+1,m]-apol[ll,m]);
+                apol_inv[n,m] = ww*a_grid[ll] + (1-ww)*a_grid[ll+1];
+            else
+                apol_inv[n,m] = a_grid[ll];
+            end
+        end
     end
-
-    #interpolating over monotone region
-    for n=2:end
-        ll = findlast(apol[:,m].<=a_grid_fine[n]);
-        apol_inv[];
-    end
-
-
-    knots = (apol[last_con+1:end,m],);
-    itp = interpolate(knots, a_grid[last_con+1:end], Gridded(Linear()));
-    apol_max = apol[end,m];
-    monotone_locs = findall((a_grid_fine.>apol[last_con+1,m]) .* (a_grid_fine[:,m].<=apol_max));
-    itp1 = itp.(a_grid_fine[monotone_locs]);
-
-    apol_inv[]
-    itp_new = interpolate()
-    itp2 = itp(itp1,)
-
 end
+=#

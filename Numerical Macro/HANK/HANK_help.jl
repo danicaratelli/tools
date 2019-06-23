@@ -17,13 +17,14 @@ function solveHANK(K0::Number,tau0::Number,Tran::Array{Float64,2},params::Dict)
     #step 2:
         #compute the wage w and the interest rate r based on guesses for capital
         #stock K
-    K0 = 15
+    K0 = 243.7;
+    tau0 = 0.01724;
     w = (1-α)*(K0/L)^(α);
     r = α*(L/K0)^(1-α) - δ;
 
     #step 3:
         #solving HH's problem
-    cpol, apol = HHegm(param,tau0,w,r,Tran);
+    @time cpol, apol = HHegm(param,tau0,w,r,Tran);
 
     #step 4:
         #computing the stationary distribution of assets via simulation
@@ -36,7 +37,7 @@ function solveHANK(K0::Number,tau0::Number,Tran::Array{Float64,2},params::Dict)
 end
 
 
-function HHegm(params::Dict,τ::Number,w::Number,r::Number,Tran::Array{Float64,2},tol=1e-10,maxiter=5000)
+function HHegm(param::Dict,τ::Number,w::Number,r::Number,Tran::Array{Float64,2},tol=1e-8,maxiter=10000)
     #Inputs:
         #params:    parameter dictionary
         #τ:         tax rate
@@ -64,6 +65,8 @@ function HHegm(params::Dict,τ::Number,w::Number,r::Number,Tran::Array{Float64,2
     iter = 0;
     cpol_old = ones(N,2);
     cpol_new = ones(N,2);
+    #cpol_old = zeros(N,2) .+ 0.00001;
+    #cpol_new = zeros(N,2) .+ 0.00001;
     while dist>tol && iter<maxiter
         cpol_tmp = (β*(1+(1-τ)*r)*cpol_old.^(-η)*Tran').^(-1/η);
 
@@ -87,9 +90,8 @@ function HHegm(params::Dict,τ::Number,w::Number,r::Number,Tran::Array{Float64,2
             cpol_new[cgrid_end,m] .= itp(a_tmp[end,m]);
         end
 
-
         dist = maximum(abs.(cpol_new.-cpol_old)[:]);
-        if iter%100==0
+        if iter%500==0
             println("Iteration #"*string(iter)*", dif = "*string(dist));
         end
         iter+=1;
@@ -106,7 +108,7 @@ end
 
 
 
-function simul_dist(apol::Array{Float64,2},N::Int64,a_grid::Array{Float64,1},Tran::Array{Float64,2},tol=1e-10,maxiter=1000)
+function simul_dist(apol::Array{Float64,2},N::Int64,a_grid::Array{Float64,1},Tran::Array{Float64,2},tol=1e-8,maxiter=1000)
 
     #finding the policy for assets in index form
     apol_idx = Int.(zeros(apol));
@@ -121,13 +123,11 @@ function simul_dist(apol::Array{Float64,2},N::Int64,a_grid::Array{Float64,1},Tra
             st = 1;
         end
         for n=st:N
-            locsi = findlast(apol[n,m].>=a_grid)
+            locsi = findmin(abs.(apol[n,m].-a_grid))[2];
             apol_idx[n,m] = locsi;
         end
     end
 
-    #K = maxiter;
-    #eps_rand = rand(K,N,2);
     Fdist = ones(N,2)./(2*N);
     dist = Inf;
     it = 0;

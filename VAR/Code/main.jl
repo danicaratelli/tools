@@ -9,7 +9,6 @@
 
 
 #------------- Bureau ---------------
-workspace();
 
 ## Path setting##
 code_path = pwd();
@@ -114,7 +113,8 @@ for s = 1:n;
 
         for k=1:nperiods;
             set = reshape(IRFs[k,r,s,:],ndraws);
-            set_sort = sort(set,1);
+            set_sort = set;
+            #set_sort = sort(set,1);
             IRF_conf[k,1] = set_sort[Integer(((50-conf_int/2)/100)*ndraws)];
             IRF_conf[k,2] = set_sort[Integer((50/100)*ndraws)];
             IRF_conf[k,3] = set_sort[Integer(((50+conf_int/2)/100)*ndraws)];

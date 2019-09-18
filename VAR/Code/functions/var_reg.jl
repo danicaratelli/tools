@@ -4,7 +4,7 @@ function var_reg(Data,p,con=1)
     #                ii.  p, the number of lags
     #                ii.  con, 1 if constant included, 0 otherwise
 
-   
+
     T = size(Data,2);
     n = size(Data,1);
     #organize Y (LHS of regression)
@@ -25,10 +25,9 @@ function var_reg(Data,p,con=1)
 
     β = (X'*X)^-1*X'*Y; #coefficients of regression
     Σ = (Y-X*β)'*(Y-X*β)/(T-p); #estimated variance of ϵ
-    Σ = floor(Σ*1e12)/1e12;
+    Σ = floor.(Σ*1e12)/1e12;
     Fits = X*β;
-    
+
     dict = Dict("coeff" => β, "var" => Σ, "dep" => Y, "indep" => X, "fits" => Fits);
     return dict;
 end
-    

@@ -17,18 +17,18 @@ function Data_organizer(Data, Var_names, st_, en_, Transformations,T,n)
     end
     if en_!=size(Data,1);
        Data = deleterows!(Data,en_+1:size(Data,1));
-    end 
+    end
 
     Y = repmat([NaN],length(Var_names),T);
 
     Data_cols = map(x->string(x),names(Data));
 
-    if !isequal(intersect(Transformations,["lin","ln"]),Transformations);
+    if sum(Transformations.==intersect(Transformations,["lin","ln"]))!==n
         Y = Y[:,2:end];
     end
     for k=1:length(Var_names)
         loc_k = find(Data_cols.==Var_names[k])[1];
-        tmp_data = float(Data[:,loc_k]);
+        tmp_data = float.(Data[:,loc_k]);
 
         if Transformations[k]=="lin";
             yy = lin(tmp_data);

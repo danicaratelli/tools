@@ -36,8 +36,10 @@ function NewtonRaphson_secant(f, x0, x1, Xs, tol = 1e-8, maxiter = 10000)
     it = 0
     @assert ((x0 >= Xs[1]) &&
              (x0 <= Xs[end]) && (x1 >= Xboundry[1]) && (x1 <= Xboundry[end])) "Starting value is not in function support Xs"
-    while (abs(f(x1)) > tol) && (it < maxiter)
-        xnew = x1 - f(x1) * (x1 - x0) / (f(x1) - f(x0))
+    f0 = f(x0);
+    f1 = f(x1);
+    while (abs(f1) > tol) && (it < maxiter)
+        xnew = x1 - f1*(x1 - x0)/(f1 - f0)
         if xnew < Xboundry[1]
             xnew = Xboundry[1]
         elseif xnew > Xboundry[end]
@@ -96,7 +98,7 @@ end
         or if the number of iterations go beyond maxiter.
         For more details see Ken Judd (p. 170) or Heer & Maussner (p. 614)
 """
-function Broyden_secant(f, J, x0, Xs, tol = 1e-8, maxiter = 10000)
+function Broyden_secant(f, J, x0, Xboundry, tol = 1e-8, maxiter = 10000)
     Jnew = J;
 
     it = 0;
@@ -106,7 +108,8 @@ function Broyden_secant(f, J, x0, Xs, tol = 1e-8, maxiter = 10000)
     for n = 1:ndim
         @assert ((xold[n] >= Xboundry[n, 1]) && (xold[n] <= Xboundry[n, end])) "Starting value is not in function support Xs"
     end
-    while (sum(abs.(f(xold))) > tol) && (it < maxiter)
+    fold = f(xold);
+    while (sum(abs.(fold)) > tol) && (it < maxiter)
         xnew = xold - inv(Jnew)*f(xold);
         for n = 1:ndim
             if xnew[n] < Xboundry[n, 1]
@@ -116,7 +119,8 @@ function Broyden_secant(f, J, x0, Xs, tol = 1e-8, maxiter = 10000)
             end
         end
         w = xnew-xold;
-        Jnew = Jnew + (((f(xnew)-f(xold))-Jnew*w)*w')/(w'*w);
+        fnew = f(xnew);
+        Jnew = Jnew + (((fnew-fold)-Jnew*w)*w')/(w'*w);
         xold = copy(xnew);
         it += 1
     end

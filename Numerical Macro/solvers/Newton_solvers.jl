@@ -1,4 +1,4 @@
-using LinearAlgebra
+using LinearAlgebra, ForwardDiff
 
 function NewtonRaphson(f, fprime, xstart, Xs, tol = 1e-8, maxiter = 10000)
     fnew(x) = x - f(x) / fprime(x)

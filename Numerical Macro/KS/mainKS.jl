@@ -1,3 +1,8 @@
+## author: daniele caratelli
+## description: mainKS.jl solves the basic Krussel-Smith (1998) model as in
+## Heer-Maussner example 8.3
+
+using Dierckx #Interpolations
 
 
 ##  Parameters
@@ -28,6 +33,8 @@ NN = 5000;   #number of households
 N0 = 0.95;
 K0 = ((1/β - δ)/α)^(1/(α-1))*N0;
 #computing the next period employment
+ug = 0.0386;    #probability of unemployment in good state
+ub = 0.1073;    #probability of unemployment in bad state
 us = [ug;ub];
 N1 = 1 .- us;
 

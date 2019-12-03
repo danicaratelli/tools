@@ -4,8 +4,6 @@
 ## employment status. For details on how to construct the transition matrix see
 ## Heer-Maussner Ch. 8.3
 
-ug = 0.0386;   #probability of unemployment in good state
-ub = 0.1073;    #probability of unemployment in bad state
 Γgg = [0.9615 0.0385; 0.9581 0.0419];
 Γbb = [0.9525 0.0475; 0.3952 0.6048];
 Γgb = [(1-ub)/(1-ug) (ub-ug)/(1-ug); 0 1];
@@ -27,34 +25,71 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 τ(K,Z) = 1 ./((w(K,Z).*N(Z) .+ r(K,Z)*K)./(ζ*w(K,Z).*u(Z)) .+ 1);
 
 
-function solveHH(agrid,Kgrid,Zs,Hmat)
+function solveHH(agrid,Kgrid,Zs,Hmat,tol=1e-5,maxiter=1000)
     na = length(agrid);
     nK = length(Kgrid);
     nZ = length(Zs);
 
     #initiliazing matrices
-    cguess = repeat(0.5*agrid,1,nZ*2,nK);
-    cguess = permutedims(cguess,[2,1,3]);
+    cold = repeat(0.2*agrid,1,nZ*2,nK);
+    cold = permutedims(cold,[2,1,3]) .+ 0.01;
+    cnew = zeros(nZ*2,na,nk);
 
-    for ik = 1:nk
-        k = Kgrid[ik];
-        for iz = 1:nZ
-            z = Zs[iz];
-            knew = exp(Hmat[iz,:]'*[1;log(k)]);
-            klow_int, wint = interpolateK(knew,Kgrid);
-            #consumption guess given k' instead of k
-            cguess_int = wint*cguess[:,:,klow_int] .+ (1-wint)*cguess[:,:,klow_int+1];
-            #computing aggregate
-            rnew = r(knew,Zs);   #next period interest rate
-            wnew = w(knew,Zs);   #next period interest rate
-            τnew = τ(knew,Zs);   #next period interest rate
-            #computing consumption from the Euler equation (z)
-            ctoday = β*Γ[2*(iz-1)+1:2*iz,:]*repeat(repeat((1 .+ (1 .- τnew).*rnew),1,2)'[:],1,na).*(cguess_int.^(η));
-            for ie = 0:1
+    itnum = 0;
+    dist = Inf;
 
+    while dist>tol && itnum<maxiter
+        println(itnum)
+        for ik = 1:nk
+            k = Kgrid[ik];
+            for iz = 1:nZ
+                z = Zs[iz];
+                knew = exp(Hmat[iz,:]'*[1;log(k)]);
+                klow_int, wint = interpolateK(knew,Kgrid);
+                #consumption guess given k' instead of k
+                cold_int = wint*cold[:,:,klow_int] .+ (1-wint)*cold[:,:,klow_int+1];
+                #computing aggregate
+                rtoday = r(k,z);   #today's interest rate
+                wtoday = w(k,z);   #today's interest rate
+                τtoday = τ(k,z);   #today's interest rate
+                rnew = r(knew,Zs);   #next period interest rate
+                wnew = w(knew,Zs);   #next period interest rate
+                τnew = τ(knew,Zs);   #next period interest rate
+                #computing consumption from the Euler equation (z)
+                ctoday = (β*Γ[2*(iz-1)+1:2*iz,:]*((repeat((1 .+ (1 .- τnew).*rnew),1,2)'[:]).*(cold_int.^(-η)))).^(-1/η);
+                #looping over employed (ie=0) and unemployed (ie=1)
+                for ie = 0:1
+                    if ie==0
+                        atoday = (agrid .+ ctoday[ie+1,:] .- (1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
+                    elseif ie==1
+                        atoday = (agrid .+ ctoday[ie+1,:] .- ζ*(1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
+                    end
+                    #getting consumption today over agrid rather than atoday
+                    ctoday_new = zeros(na);
+                    #binding borrowing constraint
+                    iconstained = agrid .<= atoday[1]; #points which are at the borrowing constraint
+                    if ie==0 && sum(iconstained)>0
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] + (1-τtoday)*wtoday - agrid[1];
+                    elseif ie==1 && sum(iconstained)>0
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] + ζ*(1-τtoday)*wtoday - agrid[1];
+                    end
+                    #interpolating today's assets
+                    itp = Spline1D(atoday,ctoday[ie+1,:],k=1,bc="extrapolate")
+                    #itp = interpolate((atoday,), ctoday[ie+1,:], Gridded(Linear()));
+                    ctoday_new[.!iconstained] = itp(agrid[.!iconstained]);
+                    #inserting updated ctoday_new in cnew
+                    cnew[2*(iz-1)+1 + ie,:,ik] = ctoday_new;
+                end
             end
         end
+        dist = maximum(abs.(cnew .- cold));
+        if (itnum%100)==0
+            println("Iteration = "*string(itnum)*";      dist = "*string(dist));
+        end
+        itnum += 1;
+        cold = copy(cnew);
     end
+    return cold
 end
 
 

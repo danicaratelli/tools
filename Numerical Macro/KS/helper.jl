@@ -28,7 +28,7 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 
 
 # endogenous grid method for HH problem
-function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,tol=1e-6,maxiter=1000)
+function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,iprint=0,tol=1e-6,maxiter=1000)
     na = length(agrid);
     nK = length(Kgrid);
     nZ = length(Zs);
@@ -85,7 +85,7 @@ function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,tol=1e-6,maxiter=1000)
             end
         end
         dist = maximum(abs.(cnew .- cold));
-        if (itnum%20)==0
+        if (iprint==1) && (itnum%20)==0
             println("Iteration = "*string(itnum)*";      dist = "*string(dist));
         end
         itnum += 1;
@@ -250,4 +250,39 @@ function simulate_HH(NN,Nsimul,astart,simulZ,dist_employment,cpol,Kgrid,agrid)
         asset_sim[:,i] = (was*wK).*A_alow_Klow .+ (was*(1-wK)).*A_alow_Khigh .+ ((1 .- was)*wK).*A_ahigh_Klow .+ ((1 .- was)*(1-wK)).*A_ahigh_Khigh;
     end
     return asset_sim, Kpath;
+end
+
+
+function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,tol=1e-3,maxiter=10)
+
+    NN, Nsimul = size(dist_idiosyncratic);
+    vec_ones = ones(Nsimul-Ngarbage-1,1);   #vector of 1s for the constant term in regression
+    itnum = 0;
+    dist = Inf;
+    dist_aggregate_clean = dist_aggregate[Ngarbage:Nsimul-2];
+        #good state
+    ig = findall(dist_aggregate_clean.==1);
+        #bad state
+    ib = findall(dist_aggregate_clean.==2);
+
+    while dist>tol && itnum<maxiter
+        #policy function for household
+        cpol, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat,0);
+        #simulation of distributions
+        A_sim, Kpath = simulate_HH(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,cpol,Kgrid,agrid);
+        Kpath_clean = Kpath[Ngarbage:Nsimul-1]; #selecting relevant periods
+        #updating LOM of capital
+        lom_params_good = [ones(length(ig)) log.(Kpath_clean[ig])]\log.(Kpath_clean[ig.+1]);
+        lom_params_bad = [ones(length(ib)) log.(Kpath_clean[ib])]\log.(Kpath_clean[ib.+1]);
+        Hmat_new = [lom_params_good'; lom_params_bad'];
+
+        dist = maximum(abs.(Hmat_new .- Hmat));
+        if (itnum%1)==0
+            println("Iteration = "*string(itnum)*";      dist = "*string(dist));
+        end
+        itnum += 1;
+        Hmat = copy(Hmat_new);
+    end
+
+    return Hmat, dist, itnum;
 end

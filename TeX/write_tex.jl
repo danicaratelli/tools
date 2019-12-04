@@ -1,5 +1,4 @@
-"""
-   ...
+"""  
    # Description
    writes a Julia DataFrame table to a .tex table in LaTeX
 
@@ -13,10 +12,7 @@
 
    # Output
    - .tex table will be written to file.
-   ...
 """
-
-
 
 function write_tex(filename, tab, caption="", style="", num_prec=2,linesep="\\hline")
     nrows = size(tab,1); ncols = size(tab,2);

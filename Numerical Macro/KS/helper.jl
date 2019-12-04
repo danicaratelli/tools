@@ -4,6 +4,7 @@
 ## employment status. For details on how to construct the transition matrix see
 ## Heer-Maussner Ch. 8.3
 
+ΓZ = [0.8 0.2; 0.2 0.8];    #transition matrix for aggregate state
 Γgg = [0.9615 0.0385; 0.9581 0.0419];
 Γbb = [0.9525 0.0475; 0.3952 0.6048];
 Γgb = [(1-ub)/(1-ug) (ub-ug)/(1-ug); 0 1];
@@ -25,7 +26,7 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 τ(K,Z) = 1 ./((w(K,Z).*N(Z) .+ r(K,Z)*K)./(ζ*w(K,Z).*u(Z)) .+ 1);
 
 
-function solveHH(agrid,Kgrid,Zs,Hmat,tol=1e-5,maxiter=1000)
+function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,tol=1e-6,maxiter=1000)
     na = length(agrid);
     nK = length(Kgrid);
     nZ = length(Zs);
@@ -39,7 +40,6 @@ function solveHH(agrid,Kgrid,Zs,Hmat,tol=1e-5,maxiter=1000)
     dist = Inf;
 
     while dist>tol && itnum<maxiter
-        println(itnum)
         for ik = 1:nk
             k = Kgrid[ik];
             for iz = 1:nZ
@@ -69,9 +69,9 @@ function solveHH(agrid,Kgrid,Zs,Hmat,tol=1e-5,maxiter=1000)
                     #binding borrowing constraint
                     iconstained = agrid .<= atoday[1]; #points which are at the borrowing constraint
                     if ie==0 && sum(iconstained)>0
-                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] + (1-τtoday)*wtoday - agrid[1];
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ (1-τtoday)*wtoday .- agrid[1];
                     elseif ie==1 && sum(iconstained)>0
-                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] + ζ*(1-τtoday)*wtoday - agrid[1];
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ ζ*(1-τtoday)*wtoday .- agrid[1];
                     end
                     #interpolating today's assets
                     itp = Spline1D(atoday,ctoday[ie+1,:],k=1,bc="extrapolate")
@@ -83,13 +83,32 @@ function solveHH(agrid,Kgrid,Zs,Hmat,tol=1e-5,maxiter=1000)
             end
         end
         dist = maximum(abs.(cnew .- cold));
-        if (itnum%100)==0
+        if (itnum%20)==0
             println("Iteration = "*string(itnum)*";      dist = "*string(dist));
         end
         itnum += 1;
         cold = copy(cnew);
     end
-    return cold
+
+    if iV==1
+        #computing the corresponding Value function
+        Vold = (cold.^(1-η))/(1-η);
+        Vnew = zeros(2*nZ,na,nK);
+
+        itnum = 0;
+        dist = Inf;
+        while dist>tol && itnum<maxiter
+            for ik=1:nK
+                Vnew[:,:,ik] = (cpol[:,:,ik].^(1-η))/(1-η) .+ β*Γ*Vold[:,:,ik];
+            end
+            dist = maximum(abs.(Vnew .- Vold));
+            Vold = copy(Vnew);
+            itnum += 1;
+        end
+        return cold, Vold, dist, itnum
+    else
+        return cold, dist, itnum
+    end
 end
 
 

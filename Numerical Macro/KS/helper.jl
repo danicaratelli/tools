@@ -28,7 +28,7 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 
 
 # endogenous grid method for HH problem
-function solveHH_assets(agrid,Kgrid,Zs,Hmat,iV=1,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+function solveHH_assets(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
     na = length(agrid);
     nK = length(Kgrid);
     nZ = length(Zs);
@@ -49,7 +49,7 @@ function solveHH_assets(agrid,Kgrid,Zs,Hmat,iV=1,cold=0,iprint=0,tol=1e-6,maxite
             for iz = 1:nZ
                 z = Zs[iz];
                 knew = exp(Hmat[iz,:]'*[1;log(k)]);
-                klow_int, wint = interpolateK(knew,Kgrid);
+                klow_int, wint = interpolate1D(knew,Kgrid);
                 #consumption guess given k' instead of k
                 cold_int = wint*cold[:,:,klow_int] .+ (1-wint)*cold[:,:,klow_int+1];
                 #computing aggregate
@@ -108,34 +108,37 @@ end
 
 
 # linear interpolation routine (for singleton or vector)
-function interpolateK(k,Kgrid)
+function interpolate1D(k,Kgrid)
     nK = length(Kgrid);
-    if length(k)==1
-            nK = length(Kgrid);
-        if k<Kgrid[1]
-            kloc_min = 1;
-            wk = 1;
-        elseif k>Kgrid[end]
-            kloc_min = nK-1;
-            wk = 0;
-        else
-            kloc_min = findlast(k.>=Kgrid);
-            wk = 1 - (k - Kgrid[kloc_min])/(Kgrid[kloc_min + 1] - Kgrid[kloc_min]);
-        end
+    nK = length(Kgrid);
+    if k<Kgrid[1]
+        kloc_min = 1;
+        wk = 1;
+    elseif k>Kgrid[end]
+        kloc_min = nK-1;
+        wk = 0;
     else
-        kloc_min = Int.(zeros(length(k)));
-        wk = zeros(length(k));
-            #below minimum
-        kloc_min[k.<Kgrid[1]] .= 1;
-        wk[k.<Kgrid[1]] .= 1;
-        kloc_min[k.>Kgrid[end]] .= nk - 1;
-        wk[k.>Kgrid[1]] .= 0;
-        kintra = (k.>=Kgrid[1]) .* (k.<=Kgrid[end]);
-        kloc_min[kintra] = map(x->findlast(x.>=Kgrid),k[kintra]);
-        wk[kintra] = 1 .- (k[kintra] .- Kgrid[kloc_min[kintra]])./(Kgrid[kloc_min[kintra] .+ 1] .- Kgrid[kloc_min[kintra]]);
+        kloc_min = findlast(k.>=Kgrid);
+        wk = 1 - (k - Kgrid[kloc_min])/(Kgrid[kloc_min + 1] - Kgrid[kloc_min]);
     end
     return kloc_min, wk;
 end
+
+function interpolate2D(k,Kgrid)
+    nK = length(Kgrid);
+    kloc_min = Int.(zeros(length(k)));
+    wk = zeros(length(k));
+        #below minimum
+    kloc_min[k.<Kgrid[1]] .= 1;
+    wk[k.<Kgrid[1]] .= 1;
+    kloc_min[k.>Kgrid[end]] .= nk - 1;
+    wk[k.>Kgrid[1]] .= 0;
+    kintra = (k.>=Kgrid[1]) .* (k.<=Kgrid[end]);
+    kloc_min[kintra] = map(x->findlast(x.>=Kgrid),k[kintra]);
+    wk[kintra] = 1 .- (k[kintra] .- Kgrid[kloc_min[kintra]])./(Kgrid[kloc_min[kintra] .+ 1] .- Kgrid[kloc_min[kintra]]);
+    return kloc_min, wk;
+end
+
 
 
 # Plotting policy functions from the household problem
@@ -211,23 +214,23 @@ function simulate_HH_assets(NN,Nsimul,astart,simulZ,dist_employment,apol,Kgrid,a
     for i=2:Nsimul
         Klast = mean(asset_sim[:,i-1]);
         Kpath[i-1] = Klast;
-        locK, wK = interpolateK(Klast,Kgrid);
-        locas, was = interpolateK(asset_sim[:,i-1],agrid);
-        ind_extract = zeros(Nsimul)
-        x_indxs = 2*(simulZ[i-1]-1) .+ 1 .+ dist_employment[:,i-1];
+        locK, wK = interpolate1D(Klast,Kgrid);
+        locas, was = interpolate2D(asset_sim[:,i-1],agrid);
+
+        x_indxs = 2*(simulZ[i-1]-1) + 1;
 
         #getting the individual components
         #low asset low K
-        A_alow_Klow = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas,locK] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas,locK];
+        A_alow_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK];
 
         #high assets and low capital
-        A_ahigh_Klow = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas.+1,locK] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas.+1,locK];
+        A_ahigh_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locas.+1,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas.+1,locK];
 
         #low assets and high capital
-        A_alow_Khigh = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas,locK+1];
+        A_alow_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK+1];
 
         #high assets and high capital
-        A_ahigh_Khigh = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas.+ 1,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas.+ 1,locK+1];
+        A_ahigh_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locas.+ 1,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas.+ 1,locK+1];
 
         asset_sim[:,i] = (was*wK).*A_alow_Klow .+ (was*(1-wK)).*A_alow_Khigh .+ ((1 .- was)*wK).*A_ahigh_Klow .+ ((1 .- was)*(1-wK)).*A_ahigh_Khigh;
     end
@@ -248,7 +251,7 @@ function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngar
 
     while dist>tol && itnum<maxiter
         #policy function for household
-        cpol, apol, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat,0,cpolguess);
+        cpol, apol, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat,cpolguess);
         cpolguess = copy(cpol);
         #simulation of distributions
         A_sim, Kpath = simulate_HH_assets(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,apol,Kgrid,agrid);

@@ -43,7 +43,7 @@ Hmat = [0.2 0.9; 0.2 0.9];  #parameters for the law of motion of capital
 
 ## Step 4
 Zs = [Zg;Zb];
-cpol, apol, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat,0,0);
+cpol, apol, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat,0,0);
 
 plot_policies(agrid,Kgrid,cpol)
 
@@ -54,7 +54,7 @@ simulZ = simul_states(Nsimul);
     #simulating individual employment/unemployment states
 dist_employment = simul_employment(NN,Nsimul,simulZ);
     #simulating distribution of HHs over time
-A_sim, Kpath = simulate_HH_assets(NN,Nsimul,3,simulZ,dist_employment,apol,Kgrid,agrid);
+@time A_sim, Kpath = simulate_HH_assets(NN,Nsimul,3,simulZ,dist_employment,apol,Kgrid,agrid);
 
 ## Step 6
 simulZ_clean = simulZ[Ngarbage:Nsimul-2];
@@ -68,10 +68,10 @@ lom_params_bad = [ones(length(ib)) log.(Kpath_clean[ib])]\log.(Kpath_clean[ib.+1
 Hmat_new = [lom_params_good'; lom_params_bad'];
 
 ## Step 7
-Hmat_star, dstar, itstar = estimate_LOM(agrid,Kgrid,Hmat,Zs,simulZ,dist_employment,Ngarbage,cpol,1e-6,20);
+@time Hmat_star, dstar, itstar = estimate_LOM(agrid,Kgrid,Hmat,Zs,simulZ,dist_employment,Ngarbage,cpol,1e-6,20);
 
 ## Final Results
-cpol_final, apol_final, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat_star,0,0,0);
+cpol_final, apol_final, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat_star,0,0,0);
 A_sim_final, Kpath_final = simulate_HH_assets(NN,Nsimul,5,simulZ,dist_employment,apol_final,Kgrid,agrid);
 
     #plot for capital
@@ -83,4 +83,4 @@ title("Capital over time",fontsize=14)
 close()
 hist(mean(A_sim_final[:,1:(Nsimul-Ngarbage)],dims=2),bins=50)
 xlabel("assets")
-title("Distribution of asset by people",fontsize=14)
+title("Distribution of asset by people (average over time)",fontsize=14)

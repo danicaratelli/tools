@@ -27,15 +27,34 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 τ(K,Z) = 1 ./((w(K,Z).*N(Z) .+ r(K,Z)*K)./(ζ*w(K,Z).*u(Z)) .+ 1);
 
 
-# endogenous grid method for HH problem
-function solveHH_assets(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+##-----     HOUSEHOLD PROBLEM     -----##
+"""
+    solveHH(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+
+    Solving household problem via Endogenous Grid Method.
+
+   Inputs:
+   -------
+   ``agrid``    :       array (na),  grid for assets\n
+   ``Kgrid``    :       array (nk),  grid for capital\n
+   ``Zs``       :       array (nZ),  aggregate productivities\n
+   ``Hmat``     :       array (nZ,nZ),   law of motion parameters\n
+                --- optional inputs:\n
+   ``cold``     :       array (2*nZ,na,nk),  initial guess for consumption policy fnct\n
+   ``iprint``   :       Number,  1 to print iteration info\n
+   ``tol``      :       Number,  algorithm tolerance\n
+   ``maxiter``  :       Integer,  maximum number of iterations\n
+   -------
+   ```
+"""
+function solveHH(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
     na = length(agrid);
-    nK = length(Kgrid);
+    nk = length(Kgrid);
     nZ = length(Zs);
 
     #initiliazing matrices
     if cold==0
-        cold = repeat(0.2*agrid,1,nZ*2,nK);
+        cold = repeat(0.2*agrid,1,nZ*2,nk);
         cold = permutedims(cold,[2,1,3]) .+ 0.01;
     end
     cnew = zeros(nZ*2,na,nk);
@@ -107,38 +126,97 @@ function solveHH_assets(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=100
 end
 
 
-# linear interpolation routine (for singleton or vector)
-function interpolate1D(k,Kgrid)
-    nK = length(Kgrid);
-    nK = length(Kgrid);
-    if k<Kgrid[1]
-        kloc_min = 1;
-        wk = 1;
-    elseif k>Kgrid[end]
-        kloc_min = nK-1;
-        wk = 0;
+##-----     INTERPOLATIONS FUNCTIONS     -----##
+"""
+    interpolate1D(xq, xgrid)
+
+    Linear interpolate in 1 dimension.
+
+   Inputs:
+   -------
+   ``x``        :       Number,     number for placement on the grid\n
+   ``xgrid``    :       array (n),  grid on which x is to be placed\n
+   -------
+   ```
+"""
+function interpolate1D(x,xgrid)
+    nx = length(xgrid);
+    if x<xgrid[1]
+        xloc_min = 1;
+        wx = 1;
+    elseif x>xgrid[end]
+        xloc_min = nx-1;
+        wx = 0;
     else
-        kloc_min = findlast(k.>=Kgrid);
-        wk = 1 - (k - Kgrid[kloc_min])/(Kgrid[kloc_min + 1] - Kgrid[kloc_min]);
+        xloc_min = findlast(x.>=xgrid);
+        wx = 1 - (x - xgrid[xloc_min])/(xgrid[xloc_min + 1] - xgrid[xloc_min]);
     end
-    return kloc_min, wk;
+    return xloc_min, wx;
 end
 
-function interpolate2D(k,Kgrid)
-    nK = length(Kgrid);
-    kloc_min = Int.(zeros(length(k)));
-    wk = zeros(length(k));
-        #below minimum
-    kloc_min[k.<Kgrid[1]] .= 1;
-    wk[k.<Kgrid[1]] .= 1;
-    kloc_min[k.>Kgrid[end]] .= nk - 1;
-    wk[k.>Kgrid[1]] .= 0;
-    kintra = (k.>=Kgrid[1]) .* (k.<=Kgrid[end]);
-    kloc_min[kintra] = map(x->findlast(x.>=Kgrid),k[kintra]);
-    wk[kintra] = 1 .- (k[kintra] .- Kgrid[kloc_min[kintra]])./(Kgrid[kloc_min[kintra] .+ 1] .- Kgrid[kloc_min[kintra]]);
-    return kloc_min, wk;
-end
+"""
+    interpolate_coord(x, x1, xqi, xqia ,xqpi)
 
+    Linear interpolate:  `xq = xqpi * x[xqi] + (1-xqpi)*x[xqia]`.
+
+    Code converted from Using the Sequence-Space Jacobian to Solve and Estimate Heterogeneous-Agent Models
+
+   Inputs:
+   -------
+   ``x``        :       array (n), ascending data points\n
+   ``xq``       :       array (nq), query points\n
+   ``xqi``      :       array (nq), empty (to be filled with indices of lower bracketing gridpoints)\n
+   ``xqia``     :       array (nq), empty (to be filled with indices of upper bracketing gridpoints)\n
+   ``xqpi``     :       array (nq), empty (to be filled with weights of lower bracketing gridpoints)\n
+   -------
+   ```
+"""
+function interpolate_coord(x,xq,xqi,xqia,xqpi)
+    #size of arrays
+    nxq, nx = size(xq,1), size(x,1);
+
+    #sort and keep track of initial order
+    ind_new = sortperm(xq);
+    ind_init = sortperm(ind_new);
+    xq = xq[ind_new];
+
+    #take care of value below and above minimum
+    id = findall((x[1] .<= xq) .& (xq .< x[end]));
+    xqi[(xq .< x[1])] .= 1;
+    xqpi[(xq .< x[1])] .= 1;
+    xqi[(xq .> x[nx])] .= nx;
+    xqpi[(xq .> x[nx])] .= 1;
+
+    #interpolation
+    xi = 1;
+    x_low = x[1];
+    x_high = x[2];
+
+    for xqi_cur in id
+        xq_cur = xq[xqi_cur];
+        while xi < (nx - 1)
+           if x_high>=xq_cur
+                break
+            end
+            xi += 1
+            x_low = x_high;
+            x_high = x[xi + 1];
+        end
+        xqpi[xqi_cur] = (x_high - xq_cur)/(x_high - x_low);
+        xqi[xqi_cur] = xi;
+    end
+
+    # revert back to initial order
+    xqpi[:] = xqpi[ind_init];
+    xqi[:] = xqi[ind_init];
+
+    # Compute index of point above, or same if last on the list
+    xqia[:] = xqi[:] .+ 1
+    xqia[(xqia .>= nx)] .= nx;
+    xqia[(xq .< x[1])] .= xqi[(xq .< x[1])];
+
+    return xqi, xqia, xqpi;
+end
 
 
 # Plotting policy functions from the household problem
@@ -163,19 +241,41 @@ function plot_policies(agrid,Kgrid,cpol)
 end
 
 
-## Simuation of aggregate states
+##-----     SIMULATION of STATES     -----##
+"""
+    simul_states(Nsimul)
+
+    Simulate aggregate states (good = 1, bad = 2).
+
+   Inputs:
+   -------
+   ``Nsimul``    :       Integer,   number of simulations\n
+   -------
+"""
 function simul_states(Nsimul)
-    simulZ = Int.(zeros(Nsimul));
-    simulZ[1] = 1;
+    dist_aggregate = Int.(zeros(Nsimul));
+    dist_aggregate[1] = 1;
     rnd_nums = rand(Nsimul);
     tmpTmat = cumsum(ΓZ,dims=2);
     for i=2:Nsimul
-        simulZ[i] = findfirst(rnd_nums[i] .<= tmpTmat[simulZ[i-1],:]);
+        dist_aggregate[i] = findfirst(rnd_nums[i] .<= tmpTmat[dist_aggregate[i-1],:]);
     end
-    return simulZ;
+    return dist_aggregate;
 end
 
-function simul_employment(NN,Nsimul,simulZ)
+"""
+    simul_employment(NN,Nsimul,dist_aggregate)
+
+    Simulate idiosyncratic (i.e. employment) states (employed = 0, unemployed = 1).
+
+   Inputs:
+   -------
+   ``NN``        :       Integer,   number of agents\n
+   ``Nsimul``    :       Integer,   number of simulations\n
+   ``dist_aggregate``    :       array,     simulated aggregate states\n
+   -------
+"""
+function simul_employment(NN,Nsimul,dist_aggregate)
     #employment distribution over time and workers
     dist_employment = Int.(zeros(NN,Nsimul));
     dist_employment[1:Int(floor(ug*NN)),1] .= 1;    #initilization for employed/unemployed
@@ -187,13 +287,13 @@ function simul_employment(NN,Nsimul,simulZ)
     tmpTmats[:,:,3] = cumsum(Γgb,dims=2);
     tmpTmats[:,:,4] = cumsum(Γbg,dims=2);
     for i=2:Nsimul
-        if simulZ[i-1]==1 && simulZ[i]==1
+        if dist_aggregate[i-1]==1 && dist_aggregate[i]==1
             tmpTmat = tmpTmats[:,:,1];
-        elseif simulZ[i-1]==2 && simulZ[i]==2
+        elseif dist_aggregate[i-1]==2 && dist_aggregate[i]==2
             tmpTmat = tmpTmats[:,:,2];
-        elseif simulZ[i-1]==1 && simulZ[i]==2
+        elseif dist_aggregate[i-1]==1 && dist_aggregate[i]==2
             tmpTmat = tmpTmats[:,:,3];
-        elseif simulZ[i-1]==2 && simulZ[i]==1
+        elseif dist_aggregate[i-1]==2 && dist_aggregate[i]==1
             tmpTmat = tmpTmats[:,:,4];
         end
 
@@ -204,10 +304,32 @@ function simul_employment(NN,Nsimul,simulZ)
 end
 
 
-function simulate_HH_assets(NN,Nsimul,astart,simulZ,dist_employment,apol,Kgrid,agrid)
+##-----     SIMULATE ASSETS     -----##
+"""
+    simulate_HH_assets(NN,Nsimul,astart,dist_aggregate,dist_employment,apol,Kgrid,agrid)
+
+    Simulate individual agent's distribution of assets and the corresponding
+    aggregate capital path.
+
+   Inputs:
+   -------
+   ``NN``               :       Integer,   number of agents\n
+   ``Nsimul``           :       Integer,   number of simulations\n
+   ``astart``           :       Number,    initial asset holdings of each agent\n
+   ``dist_aggregate``   :       array,     simulated aggregate states\n
+   ``dist_employment``  :       array,     simulated idiosyncratic states\n
+   ``aold``             :       array (2*nZ,na,nk),  asset policy fnct\n
+   ``Kgrid``            :       array (nk),  grid for capital\n
+   ``agrid``            :       array (na),  grid for assets\n
+   -------
+"""
+function simulate_HH_assets(NN,Nsimul,astart,dist_aggregate,dist_employment,apol,Kgrid,agrid)
     #simulating using the HH policies to get aggregate capital in each period
     Kpath = zeros(Nsimul);
     asset_sim = zeros(NN,Nsimul);
+    xfill1 = Int.(zeros(NN));
+    xfill2 = Int.(zeros(NN));
+    xfill3 = zeros(NN);
     asset_sim[:,1] .= astart;
 
 
@@ -215,22 +337,23 @@ function simulate_HH_assets(NN,Nsimul,astart,simulZ,dist_employment,apol,Kgrid,a
         Klast = mean(asset_sim[:,i-1]);
         Kpath[i-1] = Klast;
         locK, wK = interpolate1D(Klast,Kgrid);
-        locas, was = interpolate2D(asset_sim[:,i-1],agrid);
+        #locas, was = interpolate2D(asset_sim[:,i-1],agrid);
+        locas, locasH, was = interpolate_coord(agrid,asset_sim[:,i-1],xfill1,xfill2,xfill3);
 
-        x_indxs = 2*(simulZ[i-1]-1) + 1;
+        x_indxs = 2*(dist_aggregate[i-1]-1) + 1;
 
         #getting the individual components
         #low asset low K
         A_alow_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK];
 
         #high assets and low capital
-        A_ahigh_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locas.+1,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas.+1,locK];
+        A_ahigh_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locasH,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locasH,locK];
 
         #low assets and high capital
         A_alow_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK+1];
 
         #high assets and high capital
-        A_ahigh_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locas.+ 1,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas.+ 1,locK+1];
+        A_ahigh_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locasH,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locasH,locK+1];
 
         asset_sim[:,i] = (was*wK).*A_alow_Klow .+ (was*(1-wK)).*A_alow_Khigh .+ ((1 .- was)*wK).*A_ahigh_Klow .+ ((1 .- was)*(1-wK)).*A_ahigh_Khigh;
     end
@@ -238,6 +361,27 @@ function simulate_HH_assets(NN,Nsimul,astart,simulZ,dist_employment,apol,Kgrid,a
 end
 
 
+##-----     ESTIMATE Law of Motion for CAPITAL     -----##
+"""
+    estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,cpolguess,tol=1e-3,maxiter=20)
+
+    Estimate coefficient of capital law of motion by iteration.
+
+   Inputs:
+   -------
+   ``agrid``             :       array (na),  grid for assets\n
+   ``Kgrid``             :       array (nk),  grid for capital\n
+   ``Hmat``              :       array (nZ,nZ),   law of motion parameters\n
+   ``Zs``                :       array (nZ),  aggregate productivities\n
+   ``dist_aggregate``    :       array,     simulated aggregate states\n
+   ``dist_idiosyncratic``:       array,     simulated idiosyncratic states\n
+   ``Ngarbage``          :       Integer,   number of period to discard\n
+   ``cpolguess``         :       array (2*nZ,na,nk),  guess of consumption policy fnct\n
+       --- optional inputs:\n
+    ``tol``      :       Number,  algorithm tolerance\n
+    ``maxiter``  :       Integer,  maximum number of iterations\n
+   -------
+"""
 function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,cpolguess,tol=1e-3,maxiter=20)
 
     NN, Nsimul = size(dist_idiosyncratic);
@@ -251,7 +395,7 @@ function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngar
 
     while dist>tol && itnum<maxiter
         #policy function for household
-        cpol, apol, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat,cpolguess);
+        cpol, apol, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat,cpolguess);
         cpolguess = copy(cpol);
         #simulation of distributions
         A_sim, Kpath = simulate_HH_assets(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,apol,Kgrid,agrid);

@@ -28,14 +28,16 @@ r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
 
 
 # endogenous grid method for HH problem
-function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,iprint=0,tol=1e-6,maxiter=1000)
+function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,cold=0,iprint=0,tol=1e-6,maxiter=1000)
     na = length(agrid);
     nK = length(Kgrid);
     nZ = length(Zs);
 
     #initiliazing matrices
-    cold = repeat(0.2*agrid,1,nZ*2,nK);
-    cold = permutedims(cold,[2,1,3]) .+ 0.01;
+    if cold==0
+        cold = repeat(0.2*agrid,1,nZ*2,nK);
+        cold = permutedims(cold,[2,1,3]) .+ 0.01;
+    end
     cnew = zeros(nZ*2,na,nk);
 
     itnum = 0;
@@ -112,6 +114,87 @@ function solveHH(agrid,Kgrid,Zs,Hmat,iV=1,iprint=0,tol=1e-6,maxiter=1000)
         return cold, dist, itnum
     end
 end
+
+
+# endogenous grid method for HH problem
+function solveHH_assets(agrid,Kgrid,Zs,Hmat,iV=1,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+    na = length(agrid);
+    nK = length(Kgrid);
+    nZ = length(Zs);
+
+    #initiliazing matrices
+    if cold==0
+        cold = repeat(0.2*agrid,1,nZ*2,nK);
+        cold = permutedims(cold,[2,1,3]) .+ 0.01;
+    end
+    cnew = zeros(nZ*2,na,nk);
+
+    itnum = 0;
+    dist = Inf;
+
+    while dist>tol && itnum<maxiter
+        for ik = 1:nk
+            k = Kgrid[ik];
+            for iz = 1:nZ
+                z = Zs[iz];
+                knew = exp(Hmat[iz,:]'*[1;log(k)]);
+                klow_int, wint = interpolateK(knew,Kgrid);
+                #consumption guess given k' instead of k
+                cold_int = wint*cold[:,:,klow_int] .+ (1-wint)*cold[:,:,klow_int+1];
+                #computing aggregate
+                rtoday = r(k,z);   #today's interest rate
+                wtoday = w(k,z);   #today's interest rate
+                τtoday = τ(k,z);   #today's interest rate
+                rnew = r(knew,Zs);   #next period interest rate
+                wnew = w(knew,Zs);   #next period interest rate
+                τnew = τ(knew,Zs);   #next period interest rate
+                #computing consumption from the Euler equation (z)
+                ctoday = (β*Γ[2*(iz-1)+1:2*iz,:]*((repeat((1 .+ (1 .- τnew).*rnew),1,2)'[:]).*(cold_int.^(-η)))).^(-1/η);
+                #looping over employed (ie=0) and unemployed (ie=1)
+                for ie = 0:1
+                    if ie==0
+                        atoday = (agrid .+ ctoday[ie+1,:] .- (1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
+                    elseif ie==1
+                        atoday = (agrid .+ ctoday[ie+1,:] .- ζ*(1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
+                    end
+                    #getting consumption today over agrid rather than atoday
+                    ctoday_new = zeros(na);
+                    #binding borrowing constraint
+                    iconstained = agrid .<= atoday[1]; #points which are at the borrowing constraint
+                    if ie==0 && sum(iconstained)>0
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ (1-τtoday)*wtoday .- agrid[1];
+                    elseif ie==1 && sum(iconstained)>0
+                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ ζ*(1-τtoday)*wtoday .- agrid[1];
+                    end
+                    #interpolating today's assets
+                    itp = Spline1D(atoday,ctoday[ie+1,:],k=1,bc="extrapolate")
+                    #itp = interpolate((atoday,), ctoday[ie+1,:], Gridded(Linear()));
+                    ctoday_new[.!iconstained] = itp(agrid[.!iconstained]);
+                    #inserting updated ctoday_new in cnew
+                    cnew[2*(iz-1)+1 + ie,:,ik] = ctoday_new;
+                end
+            end
+        end
+        dist = maximum(abs.(cnew .- cold));
+        if (iprint==1) && (itnum%20)==0
+            println("Iteration = "*string(itnum)*";      dist = "*string(dist));
+        end
+        itnum += 1;
+        cold = copy(cnew);
+    end
+
+    ##computing asset policy corresponding to consumption policy
+    apol = zeros(size(cold));
+    for ik=1:nk
+        for iz = 1:nZ
+            apol[2*(iz-1)+1,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ (1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+1,:,ik];
+            apol[2*(iz-1)+2,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ ζ*(1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+2,:,ik];
+        end
+    end
+
+    return cold, apol, dist, itnum;
+end
+
 
 # linear interpolation routine (for singleton or vector)
 function interpolateK(k,Kgrid)
@@ -253,10 +336,43 @@ function simulate_HH(NN,Nsimul,astart,simulZ,dist_employment,cpol,Kgrid,agrid)
 end
 
 
-function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,tol=1e-3,maxiter=10)
+function simulate_HH_assets(NN,Nsimul,astart,simulZ,dist_employment,apol,Kgrid,agrid)
+    #simulating using the HH policies to get aggregate capital in each period
+    Kpath = zeros(Nsimul);
+    asset_sim = zeros(NN,Nsimul);
+    asset_sim[:,1] .= astart;
+
+
+    for i=2:Nsimul
+        Klast = mean(asset_sim[:,i-1]);
+        Kpath[i-1] = Klast;
+        locK, wK = interpolateK(Klast,Kgrid);
+        locas, was = interpolateK(asset_sim[:,i-1],agrid);
+        ind_extract = zeros(Nsimul)
+        x_indxs = 2*(simulZ[i-1]-1) .+ 1 .+ dist_employment[:,i-1];
+
+        #getting the individual components
+        #low asset low K
+        A_alow_Klow = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas,locK] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas,locK];
+
+        #high assets and low capital
+        A_ahigh_Klow = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas.+1,locK] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas.+1,locK];
+
+        #low assets and high capital
+        A_alow_Khigh = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas,locK+1];
+
+        #high assets and high capital
+        A_ahigh_Khigh = dist_employment[:,i-1].*apol[2*(simulZ[i-1]-1)+2,locas.+ 1,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[2*(simulZ[i-1]-1)+1,locas.+ 1,locK+1];
+
+        asset_sim[:,i] = (was*wK).*A_alow_Klow .+ (was*(1-wK)).*A_alow_Khigh .+ ((1 .- was)*wK).*A_ahigh_Klow .+ ((1 .- was)*(1-wK)).*A_ahigh_Khigh;
+    end
+    return asset_sim, Kpath;
+end
+
+
+function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,cpolguess,tol=1e-3,maxiter=20)
 
     NN, Nsimul = size(dist_idiosyncratic);
-    vec_ones = ones(Nsimul-Ngarbage-1,1);   #vector of 1s for the constant term in regression
     itnum = 0;
     dist = Inf;
     dist_aggregate_clean = dist_aggregate[Ngarbage:Nsimul-2];
@@ -267,9 +383,10 @@ function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngar
 
     while dist>tol && itnum<maxiter
         #policy function for household
-        cpol, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat,0);
+        cpol, apol, tol_res, iter_res = solveHH_assets(agrid,Kgrid,Zs,Hmat,0,cpolguess);
+        cpolguess = copy(cpol);
         #simulation of distributions
-        A_sim, Kpath = simulate_HH(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,cpol,Kgrid,agrid);
+        A_sim, Kpath = simulate_HH_assets(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,apol,Kgrid,agrid);
         Kpath_clean = Kpath[Ngarbage:Nsimul-1]; #selecting relevant periods
         #updating LOM of capital
         lom_params_good = [ones(length(ig)) log.(Kpath_clean[ig])]\log.(Kpath_clean[ig.+1]);
@@ -281,7 +398,7 @@ function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngar
             println("Iteration = "*string(itnum)*";      dist = "*string(dist));
         end
         itnum += 1;
-        Hmat = copy(Hmat_new);
+        Hmat = 0.5*Hmat_new + 0.5*Hmat;
     end
 
     return Hmat, dist, itnum;

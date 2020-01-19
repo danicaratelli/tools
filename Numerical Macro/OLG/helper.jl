@@ -15,17 +15,48 @@ us = [ug;ub];
 Γ = [Γgg*0.8 Γgb*0.2; Γbg*0.2 Γbb*0.8];
 
 # constructing grids
-agrid = collect(range(amin,stop=amax,length=na));
-Kgrid = collect(range(Kmin,stop=Kmax,length=nk));
+agrid = collect(range(kmin,stop=kmax,length=na));
+kgrid = collect(range(Kmin,stop=Kmax,length=nk));
 
 
 #useful functions
-N(Z) = floor.(Z)*(1-ug) .+ (1 .- floor.(Z))*(1-ub);
-u(Z) = 1 .- N(Z);
-w(K,Z) = (1-α)*Z.*(K./N(Z)).^(α);
-r(K,Z) = α*Z.*(N(Z)/K).^(1-α) .- δ;
-τ(K,Z) = 1 ./((w(K,Z).*N(Z) .+ r(K,Z)*K)./(ζ*w(K,Z).*u(Z)) .+ 1);
+function u(c,η)
+    if η==1
+        return ln.(c);
+    else
+        return (c.^(1-η))/(1-η);
+    end
+end
 
+function du(c,η)
+    if η==1
+        return 1 ./c;
+    else
+        return c.^(-η);
+    end
+end
+
+function duinv(x,η)
+    if η==1
+        return 1 ./x;
+    else
+        return x.^(-1/η);
+    end
+end
+
+w(K) = (1-α)*(K/N)^(α);
+r(K) = α*(K/N)^(α-1) - δ;
+function b(K)
+    wtmp = w(K)
+    f(b) = b - 0.3*wtmp*hbar*(1 - (b/(wtmp*N))*sum(μs[T+1:TT]))*sum(μs[1:T].*Es[1:T]);
+    b = find_zero(f, (0, wtmp), Bisection(), atol=1e-8);
+    return b;
+end
+function τ(K)
+    wtmp = w(K);
+    btmp = b(K);
+    return (btmp*sum(μs[T+1:TT]))/(wtmp*N)
+end
 
 std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
@@ -49,25 +80,51 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ```
 """
-function solveHH(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
-    na = length(agrid);
+function solveHH(agrid,zs,M,T,TR,TT,iprint=0)
     nk = length(Kgrid);
-    nZ = length(Zs);
+    nz = length(zs);
 
     #initiliazing matrices
-    if cold==0
-        cold = repeat(0.2*agrid,1,nZ*2,nk);
-        cold = permutedims(cold,[2,1,3]) .+ 0.01;
+    Cs = zeros(nk,nz,T+TR);     #1st dim -> capital
+                                #2nd dim -> productivity shock
+                                #3rd dim -> age
+    #last period of life consumption
+    Cs[:,:,end] .= (1+r(K)).*kgrid .+ b(K);
+
+    #structures for interpolation
+    xqi = zeros(nk);
+    xqia = zeros(nk);
+    xqpi = zeros(nk);
+
+    for t=TT-1:-1:1
+        Exp_V = du(Cs[:,:,t+1],η)*M';
+        c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
+        if t>T
+            k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
+        else t<=T
+            k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*Es[t]*exp.(repeat(zs',nk,1)))/(1+r(K));
+        end
+        for iz=1:nz
+            kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);
+            Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
+
+            #binding borrowing constraint
+            iconstained = kgrid .<= k_prev[1,iz]; #points which are at the borrowing constraint
+            if t>T && sum(iconstained)>0
+                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
+            elseif t<=T && sum(iconstained)>0
+                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*Es[t]*exp(zs[iz]) .- kgrid[1];
+            end
+        end
     end
-    cnew = zeros(nZ*2,na,nk);
+end
 
-    itnum = 0;
-    dist = Inf;
+#=
+#garbage from here...
 
-    while dist>tol && itnum<maxiter
         for ik = 1:nk
             k = Kgrid[ik];
-            for iz = 1:nZ
+            for iz = 1:nz
                 z = Zs[iz];
                 knew = exp(Hmat[iz,:]'*[1;log(k)]);
                 klow_int, wint = interpolate1D(knew,Kgrid);
@@ -217,7 +274,7 @@ function interpolate_coord(x,xq,xqi,xqia,xqpi)
     xqia[(xqia .>= nx)] .= nx;
     xqia[(xq .< x[1])] .= xqi[(xq .< x[1])];
 
-    return xqi, xqia, xqpi;
+    return Int.(xqi), Int.(xqia), xqpi;
 end
 
 

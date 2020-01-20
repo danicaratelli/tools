@@ -82,7 +82,6 @@ function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
     xqpi = zeros(nk);
 
     for t=TT-1:-1:1
-        println(t)
         Exp_V = du(Cs[:,:,t+1],η)*M';
         c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
         if t>T
@@ -99,7 +98,7 @@ function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
             if t>T && sum(iconstained)>0
                 Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
             elseif t<=T && sum(iconstained)>0
-                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*Es[t]*exp(zs[iz]) .- kgrid[1];
+                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*exp(Es[t]*zs[iz]) .- kgrid[1];
             end
         end
     end

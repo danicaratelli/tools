@@ -1,21 +1,6 @@
 ##
 
-## Transition function (Z,ϵ) where Z is aggregate productivity and ϵ is
-## employment status. For details on how to construct the transition matrix see
-## Heer-Maussner Ch. 8.3
-
-ug = 0.0386;    #probability of unemployment in good state
-ub = 0.1073;    #probability of unemployment in bad state
-us = [ug;ub];
-ΓZ = [0.8 0.2; 0.2 0.8];    #transition matrix for aggregate state
-Γgg = [0.9615 0.0385; 0.9581 0.0419];
-Γbb = [0.9525 0.0475; 0.3952 0.6048];
-Γgb = [(1-ub)/(1-ug) (ub-ug)/(1-ug); 0 1];
-Γbg = [1 0; (ub-ug)/ub ug/ub];
-Γ = [Γgg*0.8 Γgb*0.2; Γbg*0.2 Γbb*0.8];
-
 # constructing grids
-agrid = collect(range(kmin,stop=kmax,length=na));
 kgrid = collect(range(Kmin,stop=Kmax,length=nk));
 
 
@@ -62,13 +47,13 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
 ##-----     HOUSEHOLD PROBLEM     -----##
 """
-    solveHH(agrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+    solveHH(kgrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
 
     Solving household problem via Endogenous Grid Method.
 
    Inputs:
    -------
-   ``agrid``    :       array (na),  grid for assets\n
+   ``kgrid``    :       array (na),  grid for assets\n
    ``Kgrid``    :       array (nk),  grid for capital\n
    ``Zs``       :       array (nZ),  aggregate productivities\n
    ``Hmat``     :       array (nZ,nZ),   law of motion parameters\n
@@ -80,8 +65,8 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ```
 """
-function solveHH(agrid,zs,M,T,TR,TT,iprint=0)
-    nk = length(Kgrid);
+function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
+    nk = length(kgrid);
     nz = length(zs);
 
     #initiliazing matrices
@@ -96,7 +81,7 @@ function solveHH(agrid,zs,M,T,TR,TT,iprint=0)
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-    for t=TT-1:-1:1
+    for t=TT:-1:1
         Exp_V = du(Cs[:,:,t+1],η)*M';
         c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
         if t>T
@@ -184,6 +169,7 @@ end
     return cold, apol, dist, itnum;
 end
 
+=#
 
 ##-----     INTERPOLATIONS FUNCTIONS     -----##
 """
@@ -277,7 +263,7 @@ function interpolate_coord(x,xq,xqi,xqia,xqpi)
     return Int.(xqi), Int.(xqia), xqpi;
 end
 
-
+#=
 # Plotting policy functions from the household problem
 function plot_policies(agrid,Kgrid,cpol)
     #plotting consumption policy function for low and high capital and employed and unemployed
@@ -475,6 +461,7 @@ function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngar
     return Hmat, dist, itnum;
 end
 
+=#
 
 ##-----     TAUCHEN DISCRETIZATION     -----##
 """

@@ -21,10 +21,6 @@ Es = [0.6 1 1.075 1.15 1.08];
 x = [20, 30, 40, 50, 60];
 spl = Spline1D(x, Es[:]; w=ones(length(x)), k=1, bc="nearest", s=0.0)
 Es = spl(collect(range(20,stop=59,step=1)));
-    #assets
-kmin = 0;   #min assets
-kmax = 40;  #max assets
-na = 601;   #number of gridpoints for assets
     #capital
 Kmin = 1e-6;   #min assets
 Kmax = 40;  #max assets
@@ -45,7 +41,7 @@ nz = 9;         #number of Tauchen discretization
 Nsimul = 3000;  #number of simulations
 Ngarbage = 500; #number of initial draws to throw out
 
-#include("helper.jl")
+include("helper.jl")
 
 #constructing productivity process
 M,zs = tauchen(nz, ρ, σz); zs = collect(zs);

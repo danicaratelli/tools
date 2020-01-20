@@ -81,13 +81,14 @@ function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-    for t=TT:-1:1
+    for t=TT-1:-1:1
+        println(t)
         Exp_V = du(Cs[:,:,t+1],η)*M';
         c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
         if t>T
             k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
         else t<=T
-            k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*Es[t]*exp.(repeat(zs',nk,1)))/(1+r(K));
+            k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
         end
         for iz=1:nz
             kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);

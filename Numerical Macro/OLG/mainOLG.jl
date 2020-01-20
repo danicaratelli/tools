@@ -3,7 +3,7 @@
 ## Heer-Maussner example 10
 
 using Dierckx, Statistics, PyPlot, Distributions, Roots
-import Distributions: pdf, Normal, quantile
+#import Distributions: pdf, Normal, quantile
 ##  Parameters
     #years
 T = 40;

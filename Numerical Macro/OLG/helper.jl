@@ -54,18 +54,15 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    Inputs:
    -------
    ``kgrid``    :       array (na),  grid for assets\n
-   ``Kgrid``    :       array (nk),  grid for capital\n
-   ``Zs``       :       array (nZ),  aggregate productivities\n
-   ``Hmat``     :       array (nZ,nZ),   law of motion parameters\n
-                --- optional inputs:\n
-   ``cold``     :       array (2*nZ,na,nk),  initial guess for consumption policy fnct\n
-   ``iprint``   :       Number,  1 to print iteration info\n
-   ``tol``      :       Number,  algorithm tolerance\n
-   ``maxiter``  :       Integer,  maximum number of iterations\n
+   ``zs``       :       array (nZ),  aggregate productivities\n
+   ``M``        :       array (nZ,nZ),   transition of individual productivity\n
+   ``T``        :       Number,  years of working life\n
+   ``TR``       :       Number,  years of retirement\n
+   ``TT``       :       Number,  total life = T+TR\n
    -------
    ```
 """
-function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
+function solveHH(kgrid,zs,M,T,TR,TT)
     nk = length(kgrid);
     nz = length(zs);
 
@@ -102,6 +99,23 @@ function solveHH(kgrid,zs,M,T,TR,TT,iprint=0)
             end
         end
     end
+
+    ##computing asset policy corresponding to consumption policy
+    As = zeros(size(Cs));
+        #retirement
+    As[:,:,T+1:TT] = (1 + r(K)).*kgrid .+ b(K) .- Cs[:,:,T+1:TT];
+        #working life
+    ass_t(t) = (1 + r(K)).*kgrid .+ w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)) .- Cs[:,:,t];
+    for t=1:T
+        As[:,:,t] = ass_t(t);
+    end
+    for ik=1:nk
+        for iz = 1:nZ
+            apol[2*(iz-1)+1,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ (1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+1,:,ik];
+            apol[2*(iz-1)+2,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ ζ*(1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+2,:,ik];
+        end
+    end
+    return Cs, As;
 end
 
 #=

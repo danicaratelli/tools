@@ -47,13 +47,14 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
 ##-----     HOUSEHOLD PROBLEM     -----##
 """
-    solveHH(kgrid,Kgrid,Zs,Hmat,cold=0,iprint=0,tol=1e-6,maxiter=1000)
+    solveHH(kgrid,K,zs,M,T,TR,TT)
 
     Solving household problem via Endogenous Grid Method.
 
    Inputs:
    -------
    ``kgrid``    :       array (na),  grid for assets\n
+   ``K``        :       Number,  aggregate capital\n
    ``zs``       :       array (nZ),  aggregate productivities\n
    ``M``        :       array (nZ,nZ),   transition of individual productivity\n
    ``T``        :       Number,  years of working life\n
@@ -62,7 +63,7 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ```
 """
-function solveHH(kgrid,zs,M,T,TR,TT)
+function solveHH(kgrid,K,zs,M,T,TR,TT)
     nk = length(kgrid);
     nz = length(zs);
 
@@ -91,12 +92,14 @@ function solveHH(kgrid,zs,M,T,TR,TT)
             Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
 
             #binding borrowing constraint
-            iconstained = kgrid .<= k_prev[1,iz]; #points which are at the borrowing constraint
+            iconstained = (kgrid .<= k_prev[1,iz]); #points which are at the borrowing constraint
             if t>T && sum(iconstained)>0
                 Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
             elseif t<=T && sum(iconstained)>0
                 Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*exp(Es[t]*zs[iz]) .- kgrid[1];
             end
+            #itp = Spline1D(k_prev[:,iz],c_prev[:,iz],k=1,bc="extrapolate");
+            #Cs[.!iconstained,iz,t] = itp(kgrid[.!iconstained]);
         end
     end
 
@@ -109,81 +112,53 @@ function solveHH(kgrid,zs,M,T,TR,TT)
     for t=1:T
         As[:,:,t] = ass_t(t);
     end
-    for ik=1:nk
-        for iz = 1:nZ
-            apol[2*(iz-1)+1,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ (1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+1,:,ik];
-            apol[2*(iz-1)+2,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ ζ*(1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+2,:,ik];
-        end
-    end
     return Cs, As;
 end
 
-#=
-#garbage from here...
 
-        for ik = 1:nk
-            k = Kgrid[ik];
-            for iz = 1:nz
-                z = Zs[iz];
-                knew = exp(Hmat[iz,:]'*[1;log(k)]);
-                klow_int, wint = interpolate1D(knew,Kgrid);
-                #consumption guess given k' instead of k
-                cold_int = wint*cold[:,:,klow_int] .+ (1-wint)*cold[:,:,klow_int+1];
-                #computing aggregate
-                rtoday = r(k,z);   #today's interest rate
-                wtoday = w(k,z);   #today's interest rate
-                τtoday = τ(k,z);   #today's interest rate
-                rnew = r(knew,Zs);   #next period interest rate
-                wnew = w(knew,Zs);   #next period interest rate
-                τnew = τ(knew,Zs);   #next period interest rate
-                #computing consumption from the Euler equation (z)
-                ctoday = (β*Γ[2*(iz-1)+1:2*iz,:]*((repeat((1 .+ (1 .- τnew).*rnew),1,2)'[:]).*(cold_int.^(-η)))).^(-1/η);
-                #looping over employed (ie=0) and unemployed (ie=1)
-                for ie = 0:1
-                    if ie==0
-                        atoday = (agrid .+ ctoday[ie+1,:] .- (1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
-                    elseif ie==1
-                        atoday = (agrid .+ ctoday[ie+1,:] .- ζ*(1-τtoday)*wtoday)./(1 + (1 - τtoday)*rtoday);
-                    end
-                    #getting consumption today over agrid rather than atoday
-                    ctoday_new = zeros(na);
-                    #binding borrowing constraint
-                    iconstained = agrid .<= atoday[1]; #points which are at the borrowing constraint
-                    if ie==0 && sum(iconstained)>0
-                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ (1-τtoday)*wtoday .- agrid[1];
-                    elseif ie==1 && sum(iconstained)>0
-                        ctoday_new[iconstained] = (1 + (1-τtoday)*rtoday)*agrid[iconstained] .+ ζ*(1-τtoday)*wtoday .- agrid[1];
-                    end
-                    #interpolating today's assets
-                    itp = Spline1D(atoday,ctoday[ie+1,:],k=1,bc="extrapolate")
-                    #itp = interpolate((atoday,), ctoday[ie+1,:], Gridded(Linear()));
-                    ctoday_new[.!iconstained] = itp(agrid[.!iconstained]);
-                    #inserting updated ctoday_new in cnew
-                    cnew[2*(iz-1)+1 + ie,:,ik] = ctoday_new;
-                end
+##-----     DISTRIBUTION FORWARD     -----##
+"""
+    distribution_forward(kgrid,K,zs,M,T,TR,TT)
+
+    Solving household problem via Endogenous Grid Method.
+
+   Inputs:
+   -------
+   ``kgrid``    :       array (na),  grid for assets\n
+   ``K``        :       Number,  aggregate capital\n
+   ``zs``       :       array (nZ),  aggregate productivities\n
+   ``M``        :       array (nZ,nZ),   transition of individual productivity\n
+   ``T``        :       Number,  years of working life\n
+   ``TR``       :       Number,  years of retirement\n
+   ``TT``       :       Number,  total life = T+TR\n
+   -------
+   ```
+"""
+function distribution_forward(kgrid,K,zs,y0_mass,M,T,TR,TT)
+    k0 = 0;     #capital in first period of life
+    nk = length(kgrid);
+    nz = length(zs);
+
+    #initializing capital distribution
+    K_dist = zeros(nk,nz,TT);
+    #structures for interpolation
+    xqi = zeros(nk);
+    xqia = zeros(nk);
+    xqpi = zeros(nk);
+
+        #period t=1: agents have k=0 and the initial distribution over productivity z
+    K_dist[1,:,1] .= y0_mass[:];
+    for t=2:TT
+        for iz=1:nz
+            kl_int, kh_int, wl_int = interpolate_coord(kgrid, As[:,iz,t-1], xqi, xqia ,xqpi);
+            for ik=1:nk
+                K_dist[kl_int[ik],:,t] .= K_dist[kl_int[ik],:,t] .+ wl_int[kl_int[ik]].*K_dist[ik,iz,t-1].*M[iz,:]
+                K_dist[kh_int[ik],:,t] .= K_dist[kh_int[ik],:,t] .+ (1 - wl_int[kh_int[ik]]).*K_dist[ik,iz,t-1].*M[iz,:]
             end
         end
-        dist = maximum(abs.(cnew .- cold));
-        if (iprint==1) && (itnum%20)==0
-            println("Iteration = "*string(itnum)*";      dist = "*string(dist));
-        end
-        itnum += 1;
-        cold = copy(cnew);
     end
 
-    ##computing asset policy corresponding to consumption policy
-    apol = zeros(size(cold));
-    for ik=1:nk
-        for iz = 1:nZ
-            apol[2*(iz-1)+1,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ (1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+1,:,ik];
-            apol[2*(iz-1)+2,:,ik] = (1 + (1-τ(Kgrid[ik],Zs[iz]))*r(Kgrid[ik],Zs[iz]))*agrid .+ ζ*(1-τ(Kgrid[ik],Zs[iz]))*w(Kgrid[ik],Zs[iz]) .- cold[2*(iz-1)+2,:,ik];
-        end
-    end
-
-    return cold, apol, dist, itnum;
 end
-
-=#
 
 ##-----     INTERPOLATIONS FUNCTIONS     -----##
 """

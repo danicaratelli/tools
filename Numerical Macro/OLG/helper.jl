@@ -31,7 +31,8 @@ end
 
 w(K) = (1-α)*(K/N)^(α);
 r(K) = α*(K/N)^(α-1) - δ;
-function b(K)
+b(τ,K) = (τ*w(K)*N)/sum(μs[T+1:TT]);
+#=function b(K)
     wtmp = w(K)
     f(b) = b - 0.3*wtmp*hbar*(1 - (b/(wtmp*N))*sum(μs[T+1:TT]))*sum(μs[1:T].*Es[1:T]);
     b = find_zero(f, (0, wtmp), Bisection(), atol=1e-8);
@@ -41,7 +42,7 @@ function τ(K)
     wtmp = w(K);
     btmp = b(K);
     return (btmp*sum(μs[T+1:TT]))/(wtmp*N)
-end
+end=#
 
 std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
@@ -63,44 +64,119 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ```
 """
-function solveHH(kgrid,K,zs,M,T,TR,TT)
+function solveHH(kgrid,K,τ,zs,M,T,TR,TT)
     nk = length(kgrid);
     nz = length(zs);
 
     #initiliazing matrices
-    Cs = zeros(nk,nz,T+TR);     #1st dim -> capital
+    Cs = zeros(nk,nz,TT);       #1st dim -> capital
                                 #2nd dim -> productivity shock
                                 #3rd dim -> age
-    #last period of life consumption
-    Cs[:,:,end] .= (1+r(K)).*kgrid .+ b(K);
+    Vs = zeros(nk,nz,TT);
+    Ks = zeros(nk,nz,TT);
+    #last period of life consumption and last period utility
+    Cs[:,:,end] .= (1+r(K)).*kgrid .+ b(τ,K);
+    Vs[:,:,end] .= u(Cs[:,:,end],η);
 
     #structures for interpolation
     xqi = zeros(nk);
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-    for t=TT-1:-1:1
-        Exp_V = du(Cs[:,:,t+1],η)*M';
-        c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
-        if t>T
-            k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
-        else t<=T
-            k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
-        end
-        for iz=1:nz
-            kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);
-            Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
+    #useful derivatives of kgrid
+    kstep = kgrid[2] - kgrid[1];
+    kmidpoint = (kgrid[2:end] .+ kgrid[1:end-1])./2;
 
-            #binding borrowing constraint
-            iconstained = (kgrid .<= k_prev[1,iz]); #points which are at the borrowing constraint
-            if t>T && sum(iconstained)>0
-                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
-            elseif t<=T && sum(iconstained)>0
-                Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*exp(Es[t]*zs[iz]) .- kgrid[1];
+    @time for t=TT-1:1;#-1:1 #TT-1:-1:T+1
+        if t>T      #retirement
+            #next period value function
+            spl = Spline1D(kgrid,Vs[:,1,t+1]);
+            #numerical derivative of nexst period value function
+            dVt_num = diff(Vs[:,1,t+1],dims=1)./kstep;
+            dspl = Spline1D(kmidpoint,dVt_num;bc="extrapolate");
+
+            dVR(k,c) = evaluate(dspl, (1+r(K))*k .+ b(τ,K) .- c);
+            #computing consumption at t using FOC of HH problem
+            function solveC_ret(k)
+                objC(c) = du(c,η) - β*Ss[t]*dVR(k,c)[1];
+                solC = find_zero(objC,k/((TT-t)+1));
+                return solC;
             end
-            #itp = Spline1D(k_prev[:,iz],c_prev[:,iz],k=1,bc="extrapolate");
-            #Cs[.!iconstained,iz,t] = itp(kgrid[.!iconstained]);
+
+            #computing consumption c_t
+            Cs[:,:,t] .= map(x->solveC_ret(x),kgrid);
+            #computing assets k_{t+1}
+            Ks[:,:,t] .= (1+r(K))*kgrid .+ b(τ,K) .- Cs[:,1,t];
+            iconstrained = findall(Ks[:,1,t] .< Kmin);
+            if length(iconstrained)>0
+                Ks[iconstrained,:,t] .= kgrid[1];
+                Cs[iconstrained,:,t] .= (1 + r(K)).*kgrid[iconstrained] .+ b(τ,K) .- Ks[iconstrained,1,t];
+            end
+            Vs[:,:,t] .= u(Cs[:,1,t],η) .+ (β*Ss[t])*evaluate(spl, Ks[:,1,t]);
+        else        #working life
+            for iz=1:nz
+                #next period value function
+                spl = Spline2D(kgrid,zs,Vs[:,:,t+1]);
+                #numerical derivative of next period value function
+                dVt_num = diff(Vs[:,:,t+1],dims=1)./kstep;
+                dspl = Spline2D(kmidpoint,zs,dVt_num);
+
+                dVW(k,c,z) = evalgrid(dspl, (1+r(K))*[k] .+ (1-τ)*w(K)*hbar*exp.(Es[t]+z) .- c, zs);
+                #computing consumption at t using FOC of HH problem
+                function solveC_work(k,iz)
+                    objC(c) = du(c,η) - (β*Ss[t]*dVW(k,c,zs[iz])*M[iz,:])[1];
+                    solC = find_zero(objC,0.1);#k/((TT-t)+1));
+                    return solC;
+                end
+                #computing consumption c_t
+                Cs[:,iz,t] = map(x->solveC_work(x,iz),kgrid);
+                #linear extrapolate if necessary
+                cdoubles = findall(Cs[:,iz,t].==Cs[end,iz,t]);
+                if length(cdoubles)>1
+                    m = (Cs[cdoubles[1]-1,iz,t] - Cs[cdoubles[1] - 2,iz,t])/(kgrid[cdoubles[1]-1] - kgrid[cdoubles[1] - 2]);
+                    for ii in cdoubles[2:end]
+                        Cs[ii,iz,t] = Cs[ii-1,iz,t] + m*(kgrid[ii] - kgrid[ii-1]);
+                    end
+                end
+                #computing assets k_{t+1}
+                Ks[:,iz,t] .= (1+r(K))*kgrid .+ (1-τ)*w(K)*hbar*exp.(Es[t].+zs[iz]) .- Cs[:,iz,t];
+                iconstrained = (Ks[:,iz,t] .< Kmin);
+                if sum(iconstrained)>0
+                    Cs[iconstrained,iz,t] = (1 + r(K)).*kgrid[iconstrained] .+ (1-τ)*w(K)*hbar*exp.(Es[t]*zs[iz])  .-kgrid[1];
+                    Ks[iconstrained,iz,t] .= kgrid[1];
+                end
+                Vs[:,iz,t] = u(Cs[:,iz,t],η) .+ (β*Ss[t])*evalgrid(spl, Ks[:,iz,t], zs)*M[iz,:];
+            end
         end
+    end
+end
+
+
+
+            end
+        end
+    end
+
+
+
+    if t>T
+        k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
+    else t<=T
+        k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
+    end
+    for iz=1:nz
+        kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);
+        Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
+
+        #binding borrowing constraint
+        iconstained = (kgrid .<= k_prev[1,iz]); #points which are at the borrowing constraint
+        if t>T && sum(iconstained)>0
+            Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
+        elseif t<=T && sum(iconstained)>0
+            Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*exp(Es[t]*zs[iz]) .- kgrid[1];
+        end
+        #itp = Spline1D(k_prev[:,iz],c_prev[:,iz],k=1,bc="extrapolate");
+        #Cs[.!iconstained,iz,t] = itp(kgrid[.!iconstained]);
     end
 
     ##computing asset policy corresponding to consumption policy

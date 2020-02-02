@@ -60,8 +60,7 @@ N = hbar*sum(μs[1:T]);
 
 ## Step 2 (guesses)
 Kguess = 2.2;       #guessing aggregate capital (= guessing the interest rate)
-
+τguess = 0.1;       #guessing labor income tax
 ## Steo 3
 wguess = (1-α)*(Kguess/N)^(α);
-bguess = b(Kguess);
-τguess = τ(Kguess);
+bguess = b(Kguess,τguess);

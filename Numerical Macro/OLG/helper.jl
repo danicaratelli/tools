@@ -87,7 +87,45 @@ function solveHH(kgrid,K,τ,zs,M,T,TR,TT)
     kstep = kgrid[2] - kgrid[1];
     kmidpoint = (kgrid[2:end] .+ kgrid[1:end-1])./2;
 
-    @time for t=TT-1:1;#-1:1 #TT-1:-1:T+1
+
+    #Value function Iteration
+    cgrid = (1+r(K))*repeat(kgrid,1,nk) .- repeat(kgrid',nk,1) .+ b(τ,K);
+    c0s = (cgrid .<0);
+    cgrid[c0s] .= 100;
+    Us = u(cgrid,η);
+    Us[c0s] .= -Inf;
+
+    #retirement
+    for t=TT-1:-1:T+1
+        Vnext = β*Ss[t].*(Vs[:,:,t+1]*M');
+        for iz=1:nz
+            vs, locs = findmax(Us .+ repeat(Vnext[:,iz]',nk,1),dims=2);
+            locs = map(x->x[2],locs[:]);
+            Ks[:,iz,t] = kgrid[locs];
+            Vs[:,iz,t] = vs;
+        end
+        Cs[:,:,t] = (1+r(K))*kgrid .- Ks[:,:,t] .+ b(τ,K);
+    end
+
+    #working life
+    for t=T:-1:1
+        Vnext = β*Ss[t].*(Vs[:,:,t+1]*M');
+        for iz=1:nz
+            cgrid = (1+r(K))*repeat(kgrid,1,nk) .- repeat(kgrid',nk,1) .+ (1-τ)*w(K)*hbar*exp(Es[t] + zs[iz]);
+            c0s = (cgrid .<0);
+            cgrid[c0s] .= 100;
+            Us = u(cgrid,η);
+            Us[c0s] .= -Inf;
+
+            vs, locs = findmax(Us .+ repeat(Vnext[:,iz]',nk,1),dims=2);
+            locs = map(x->x[2],locs[:]);
+            Ks[:,iz,t] = kgrid[locs];
+            Vs[:,iz,t] = vs;
+            Cs[:,iz,t] = (1+r(K))*kgrid .- Ks[:,iz,t] .+ (1-τ)*w(K)*hbar*exp(Es[t] + zs[iz]);
+        end
+    end
+
+    #=@time for t=TT-1:-1:T+1 #;-1:1 #TT-1:-1:T+1
         if t>T      #retirement
             #next period value function
             spl = Spline1D(kgrid,Vs[:,1,t+1]);
@@ -123,13 +161,13 @@ function solveHH(kgrid,K,τ,zs,M,T,TR,TT)
 
                 dVW(k,c,z) = evalgrid(dspl, (1+r(K))*[k] .+ (1-τ)*w(K)*hbar*exp.(Es[t]+z) .- c, zs);
                 #computing consumption at t using FOC of HH problem
-                function solveC_work(k,iz)
+                function solveC_work(k)
                     objC(c) = du(c,η) - (β*Ss[t]*dVW(k,c,zs[iz])*M[iz,:])[1];
                     solC = find_zero(objC,0.1);#k/((TT-t)+1));
                     return solC;
                 end
                 #computing consumption c_t
-                Cs[:,iz,t] = map(x->solveC_work(x,iz),kgrid);
+                Cs[:,iz,t] = map(x->solveC_work(x),kgrid);
                 #linear extrapolate if necessary
                 cdoubles = findall(Cs[:,iz,t].==Cs[end,iz,t]);
                 if length(cdoubles)>1
@@ -147,11 +185,11 @@ function solveHH(kgrid,K,τ,zs,M,T,TR,TT)
                 end
                 Vs[:,iz,t] = u(Cs[:,iz,t],η) .+ (β*Ss[t])*evalgrid(spl, Ks[:,iz,t], zs)*M[iz,:];
             end
-        end
+        end=#
     end
 end
 
-
+#=
 
             end
         end
@@ -159,7 +197,7 @@ end
 
 
 
-    if t>T
+   if t>T
         k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
     else t<=T
         k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
@@ -191,7 +229,7 @@ end
     return Cs, As;
 end
 
-
+=#
 ##-----     DISTRIBUTION FORWARD     -----##
 """
     distribution_forward(kgrid,K,zs,M,T,TR,TT)

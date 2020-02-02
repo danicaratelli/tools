@@ -64,172 +64,66 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ```
 """
-function solveHH(kgrid,K,τ,zs,M,T,TR,TT)
+function solveHH(kgrid,K,zs,M,T,TR,TT)
     nk = length(kgrid);
     nz = length(zs);
 
     #initiliazing matrices
-    Cs = zeros(nk,nz,TT);       #1st dim -> capital
+        #consumption
+    Cs = zeros(nk,nz,T+TR);     #1st dim -> capital
                                 #2nd dim -> productivity shock
                                 #3rd dim -> age
-    Vs = zeros(nk,nz,TT);
-    Ks = zeros(nk,nz,TT);
-    #last period of life consumption and last period utility
-    Cs[:,:,end] .= (1+r(K)).*kgrid .+ b(τ,K);
-    Vs[:,:,end] .= u(Cs[:,:,end],η);
+        #assets
+    As = zeros(size(Cs));
 
+    #last period of life consumption
+    Cs[:,:,end] .= (1+r(K)).*kgrid .+ b(τ,K);
     #structures for interpolation
     xqi = zeros(nk);
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-    #useful derivatives of kgrid
-    kstep = kgrid[2] - kgrid[1];
-    kmidpoint = (kgrid[2:end] .+ kgrid[1:end-1])./2;
-
-
-    #Value function Iteration
-    cgrid = (1+r(K))*repeat(kgrid,1,nk) .- repeat(kgrid',nk,1) .+ b(τ,K);
-    c0s = (cgrid .<0);
-    cgrid[c0s] .= 100;
-    Us = u(cgrid,η);
-    Us[c0s] .= -Inf;
-
-    #retirement
+    #retirement (if t>T)
     for t=TT-1:-1:T+1
-        Vnext = β*Ss[t].*(Vs[:,:,t+1]*M');
-        for iz=1:nz
-            vs, locs = findmax(Us .+ repeat(Vnext[:,iz]',nk,1),dims=2);
-            locs = map(x->x[2],locs[:]);
-            Ks[:,iz,t] = kgrid[locs];
-            Vs[:,iz,t] = vs;
+        Exp_V = du(Cs[:,:,t+1],η)*M';
+        c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
+
+        k_prev = (kgrid .+ c_prev .- b(τ,K))/(1+r(K));
+        #because in retirement productivity does not matter, I just use iz = 1
+        kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,1],kgrid,xqi,xqia,xqpi);
+        Cs[:,:,t] .= c_prev[kprev_low_int,:].*w_low_int .+ c_prev[kprev_high_int,:].*(1 .- w_low_int);
+
+        #binding borrowing constraint
+        iconstained = (kgrid .<= k_prev[1,1]); #points which are at the borrowing constraint
+        if sum(iconstained)>0
+            Cs[iconstained,:,t] .= (1 + r(K))*kgrid[iconstained] .+ b(τ,K) .-kgrid[1];
         end
-        Cs[:,:,t] = (1+r(K))*kgrid .- Ks[:,:,t] .+ b(τ,K);
     end
+    As[:,:,T+1:TT] = (1 + r(K)).*kgrid .+ b(τ,K) .- Cs[:,:,T+1:TT];
 
     #working life
     for t=T:-1:1
-        Vnext = β*Ss[t].*(Vs[:,:,t+1]*M');
+        Exp_V = du(Cs[:,:,t+1],η)*M';
+        c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
+        k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ)*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
+        #looping over productivity state
         for iz=1:nz
-            cgrid = (1+r(K))*repeat(kgrid,1,nk) .- repeat(kgrid',nk,1) .+ (1-τ)*w(K)*hbar*exp(Es[t] + zs[iz]);
-            c0s = (cgrid .<0);
-            cgrid[c0s] .= 100;
-            Us = u(cgrid,η);
-            Us[c0s] .= -Inf;
+           kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);
+           Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
 
-            vs, locs = findmax(Us .+ repeat(Vnext[:,iz]',nk,1),dims=2);
-            locs = map(x->x[2],locs[:]);
-            Ks[:,iz,t] = kgrid[locs];
-            Vs[:,iz,t] = vs;
-            Cs[:,iz,t] = (1+r(K))*kgrid .- Ks[:,iz,t] .+ (1-τ)*w(K)*hbar*exp(Es[t] + zs[iz]);
+           #binding borrowing constraint
+           iconstained = (kgrid .<= k_prev[1,iz]); #points which are at the borrowing constraint
+           if sum(iconstained)>0
+              Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ)*exp(Es[t]*zs[iz]) .- kgrid[1];
+          end
         end
+       As[:,:,t] = (1 + r(K)).*kgrid .+ w(K)*hbar*(1-τ)*exp.(Es[t].+repeat(zs',nk,1)) .- Cs[:,:,t];
     end
 
-    #=@time for t=TT-1:-1:T+1 #;-1:1 #TT-1:-1:T+1
-        if t>T      #retirement
-            #next period value function
-            spl = Spline1D(kgrid,Vs[:,1,t+1]);
-            #numerical derivative of nexst period value function
-            dVt_num = diff(Vs[:,1,t+1],dims=1)./kstep;
-            dspl = Spline1D(kmidpoint,dVt_num;bc="extrapolate");
-
-            dVR(k,c) = evaluate(dspl, (1+r(K))*k .+ b(τ,K) .- c);
-            #computing consumption at t using FOC of HH problem
-            function solveC_ret(k)
-                objC(c) = du(c,η) - β*Ss[t]*dVR(k,c)[1];
-                solC = find_zero(objC,k/((TT-t)+1));
-                return solC;
-            end
-
-            #computing consumption c_t
-            Cs[:,:,t] .= map(x->solveC_ret(x),kgrid);
-            #computing assets k_{t+1}
-            Ks[:,:,t] .= (1+r(K))*kgrid .+ b(τ,K) .- Cs[:,1,t];
-            iconstrained = findall(Ks[:,1,t] .< Kmin);
-            if length(iconstrained)>0
-                Ks[iconstrained,:,t] .= kgrid[1];
-                Cs[iconstrained,:,t] .= (1 + r(K)).*kgrid[iconstrained] .+ b(τ,K) .- Ks[iconstrained,1,t];
-            end
-            Vs[:,:,t] .= u(Cs[:,1,t],η) .+ (β*Ss[t])*evaluate(spl, Ks[:,1,t]);
-        else        #working life
-            for iz=1:nz
-                #next period value function
-                spl = Spline2D(kgrid,zs,Vs[:,:,t+1]);
-                #numerical derivative of next period value function
-                dVt_num = diff(Vs[:,:,t+1],dims=1)./kstep;
-                dspl = Spline2D(kmidpoint,zs,dVt_num);
-
-                dVW(k,c,z) = evalgrid(dspl, (1+r(K))*[k] .+ (1-τ)*w(K)*hbar*exp.(Es[t]+z) .- c, zs);
-                #computing consumption at t using FOC of HH problem
-                function solveC_work(k)
-                    objC(c) = du(c,η) - (β*Ss[t]*dVW(k,c,zs[iz])*M[iz,:])[1];
-                    solC = find_zero(objC,0.1);#k/((TT-t)+1));
-                    return solC;
-                end
-                #computing consumption c_t
-                Cs[:,iz,t] = map(x->solveC_work(x),kgrid);
-                #linear extrapolate if necessary
-                cdoubles = findall(Cs[:,iz,t].==Cs[end,iz,t]);
-                if length(cdoubles)>1
-                    m = (Cs[cdoubles[1]-1,iz,t] - Cs[cdoubles[1] - 2,iz,t])/(kgrid[cdoubles[1]-1] - kgrid[cdoubles[1] - 2]);
-                    for ii in cdoubles[2:end]
-                        Cs[ii,iz,t] = Cs[ii-1,iz,t] + m*(kgrid[ii] - kgrid[ii-1]);
-                    end
-                end
-                #computing assets k_{t+1}
-                Ks[:,iz,t] .= (1+r(K))*kgrid .+ (1-τ)*w(K)*hbar*exp.(Es[t].+zs[iz]) .- Cs[:,iz,t];
-                iconstrained = (Ks[:,iz,t] .< Kmin);
-                if sum(iconstrained)>0
-                    Cs[iconstrained,iz,t] = (1 + r(K)).*kgrid[iconstrained] .+ (1-τ)*w(K)*hbar*exp.(Es[t]*zs[iz])  .-kgrid[1];
-                    Ks[iconstrained,iz,t] .= kgrid[1];
-                end
-                Vs[:,iz,t] = u(Cs[:,iz,t],η) .+ (β*Ss[t])*evalgrid(spl, Ks[:,iz,t], zs)*M[iz,:];
-            end
-        end=#
-    end
-end
-
-#=
-
-            end
-        end
-    end
-
-
-
-   if t>T
-        k_prev = (kgrid .+ c_prev .- b(K))/(1+r(K));
-    else t<=T
-        k_prev = (kgrid .+ c_prev .- w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)))/(1+r(K));
-    end
-    for iz=1:nz
-        kprev_low_int, kprev_high_int, w_low_int = interpolate_coord(k_prev[:,iz],kgrid,xqi,xqia,xqpi);
-        Cs[:,iz,t] = c_prev[kprev_low_int,iz].*w_low_int .+ c_prev[kprev_high_int,iz].*(1 .- w_low_int);
-
-        #binding borrowing constraint
-        iconstained = (kgrid .<= k_prev[1,iz]); #points which are at the borrowing constraint
-        if t>T && sum(iconstained)>0
-            Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ b(K) .-kgrid[1];
-        elseif t<=T && sum(iconstained)>0
-            Cs[iconstained,iz,t] = (1 + r(K))*kgrid[iconstained] .+ w(K)*hbar*(1-τ(K))*exp(Es[t]*zs[iz]) .- kgrid[1];
-        end
-        #itp = Spline1D(k_prev[:,iz],c_prev[:,iz],k=1,bc="extrapolate");
-        #Cs[.!iconstained,iz,t] = itp(kgrid[.!iconstained]);
-    end
-
-    ##computing asset policy corresponding to consumption policy
-    As = zeros(size(Cs));
-        #retirement
-    As[:,:,T+1:TT] = (1 + r(K)).*kgrid .+ b(K) .- Cs[:,:,T+1:TT];
-        #working life
-    ass_t(t) = (1 + r(K)).*kgrid .+ w(K)*hbar*(1-τ(K))*exp.(Es[t].+repeat(zs',nk,1)) .- Cs[:,:,t];
-    for t=1:T
-        As[:,:,t] = ass_t(t);
-    end
     return Cs, As;
 end
 
-=#
+
 ##-----     DISTRIBUTION FORWARD     -----##
 """
     distribution_forward(kgrid,K,zs,M,T,TR,TT)

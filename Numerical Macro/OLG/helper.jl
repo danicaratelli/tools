@@ -215,7 +215,7 @@ function clear_markets(kgrid,K,τ,zs,y0_mass,μs,k0,M,T,TT,tol=1e-3,maxiter=1000
         sol[1] = abs(Ks[:]'*μs[:] - x[1]);
     end
 
-    nlsolve(obj_fun!, [ Kguess; τguess]);
+    xsol = nlsolve(obj_fun!, [ Kguess; τguess]);
 
 end
 

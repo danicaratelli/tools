@@ -2,7 +2,7 @@
 ## description: mainOLG.jl solves an overlapping generations code as in
 ## Heer-Maussner example 10
 
-using Dierckx, Statistics, PyPlot, Distributions, Roots
+using Dierckx, Statistics, PyPlot, Distributions, NLsolve
 #import Distributions: pdf, Normal, quantile
 ##  Parameters
     #years
@@ -72,4 +72,5 @@ bguess = b(Kguess,τguess);
 
 ## Solving forward for distributions of consumption and asseets given initial
 #  distribution over productivity states y0_mass
+k0 = 0;
 @time K_dist, Ks, Cs = distribution_forward(kgrid,Kguess,τguess,zs,y0_mass,k0,M,T,TT);

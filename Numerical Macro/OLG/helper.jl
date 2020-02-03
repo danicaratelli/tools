@@ -54,7 +54,7 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
    Inputs:
    -------
-   ``kgrid``    :       array (na),  grid for assets\n
+   ``kgrid``    :       array (nk),  grid for assets\n
    ``K``        :       Number,  aggregate capital\n
    ``τ``        :       Number,  income tax rate\n
    ``zs``       :       array (nZ),  aggregate productivities\n
@@ -127,11 +127,11 @@ end
 """
     distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
 
-    Solving household problem via Endogenous Grid Method.
+    Updating capital distribution over time.
 
    Inputs:
    -------
-   ``kgrid``    :       array (na),  grid for assets\n
+   ``kgrid``    :       array (nk),  grid for assets\n
    ``K``        :       Number,  aggregate capital\n
    ``τ``        :       Number,  income tax rate\n
    ``zs``       :       array (nz),  aggregate productivities\n
@@ -176,14 +176,49 @@ function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
     for t=2:TT
         for iz=1:nz
             locs_low_t, locs_high_t, wt = interpolate_coord(kgrid,As_sample[:,iz,t-1],xqi,xqia,xqpi);
-            K_dist[locs_low_t,:,t] = K_dist[locs_low_t,:,t] .+ K_dist[:,iz,t-1].*wt.*repeat(M[iz,:]',nk,1);
-            K_dist[locs_high_t,:,t] = K_dist[locs_high_t,:,t] .+ K_dist[:,iz,t-1].*(1 .- wt).*repeat(M[iz,:]',nk,1);
+            K_dist[locs_low_t,:,t] = K_dist[locs_low_t,:,t] .+ Ss[t-1]*K_dist[:,iz,t-1].*wt.*repeat(M[iz,:]',nk,1);
+            K_dist[locs_high_t,:,t] = K_dist[locs_high_t,:,t] .+ Ss[t-1]*K_dist[:,iz,t-1].*(1 .- wt).*repeat(M[iz,:]',nk,1);
         end
         Ks[t] = sum(K_dist[:,:,t].*kgrid);
         Cs[t] = sum(K_dist[:,:,t].*Cs_sample[:,:,t]);
     end
     return K_dist, Ks, Cs
 end
+
+
+##-----     MARKET CLEARING     -----##
+"""
+    clear_markets(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
+
+    Finding market-clearing prices for GE.
+
+   Inputs:
+   -------
+   ``kgrid``    :       array (nk),  grid for assets\n
+   ``K``        :       Number,  guess of aggregate capital\n
+   ``τ``        :       Number,  guess of income tax rate\n
+   ``zs``       :       array (nz),  aggregate productivities\n
+   ``y0_mass``  :       array (n),  initial distribution over zs\n
+   ``y0_mass``  :       array (n),  initial distribution over zs\n
+   ``k0``       :       Number,  initial asset holdings\n
+   ``M``        :       array (nz,nz),   transition of individual productivity\n
+   ``T``        :       Number,  years of working life\n
+   ``TT``       :       Number,  total life = T+TR\n
+   -------
+   ```
+"""
+function clear_markets(kgrid,K,τ,zs,y0_mass,μs,k0,M,T,TT,tol=1e-3,maxiter=1000)
+
+    sol = [0.];
+    function obj_fun!(sol,x)
+        K_dist, Ks, Cs = distribution_forward(kgrid,x[1],x[2],zs,y0_mass,k0,M,T,TT);
+        sol[1] = abs(Ks[:]'*μs[:] - x[1]);
+    end
+
+    nlsolve(obj_fun!, [ Kguess; τguess]);
+
+end
+
 
 ##-----     INTERPOLATIONS FUNCTIONS     -----##
 """

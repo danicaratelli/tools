@@ -56,21 +56,21 @@ std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
    -------
    ``kgrid``    :       array (na),  grid for assets\n
    ``K``        :       Number,  aggregate capital\n
+   ``τ``        :       Number,  income tax rate\n
    ``zs``       :       array (nZ),  aggregate productivities\n
    ``M``        :       array (nZ,nZ),   transition of individual productivity\n
    ``T``        :       Number,  years of working life\n
-   ``TR``       :       Number,  years of retirement\n
    ``TT``       :       Number,  total life = T+TR\n
    -------
    ```
 """
-function solveHH(kgrid,K,zs,M,T,TR,TT)
+function solveHH(kgrid,K,τ,zs,M,T,TT)
     nk = length(kgrid);
     nz = length(zs);
 
     #initiliazing matrices
         #consumption
-    Cs = zeros(nk,nz,T+TR);     #1st dim -> capital
+    Cs = zeros(nk,nz,TT);     #1st dim -> capital
                                 #2nd dim -> productivity shock
                                 #3rd dim -> age
         #assets
@@ -83,7 +83,6 @@ function solveHH(kgrid,K,zs,M,T,TR,TT)
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-    #retirement (if t>T)
     for t=TT-1:-1:T+1
         Exp_V = du(Cs[:,:,t+1],η)*M';
         c_prev = duinv(β*Ss[t]*(1+r(K))*Exp_V,η);
@@ -126,7 +125,7 @@ end
 
 ##-----     DISTRIBUTION FORWARD     -----##
 """
-    distribution_forward(kgrid,K,zs,M,T,TR,TT)
+    distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
 
     Solving household problem via Endogenous Grid Method.
 
@@ -134,38 +133,56 @@ end
    -------
    ``kgrid``    :       array (na),  grid for assets\n
    ``K``        :       Number,  aggregate capital\n
-   ``zs``       :       array (nZ),  aggregate productivities\n
-   ``M``        :       array (nZ,nZ),   transition of individual productivity\n
+   ``τ``        :       Number,  income tax rate\n
+   ``zs``       :       array (nz),  aggregate productivities\n
+   ``y0_mass``  :       array (n),  initial distribution over zs\n
+   ``k0``       :       Number,  initial asset holdings\n
+   ``M``        :       array (nz,nz),   transition of individual productivity\n
    ``T``        :       Number,  years of working life\n
-   ``TR``       :       Number,  years of retirement\n
    ``TT``       :       Number,  total life = T+TR\n
    -------
    ```
 """
-function distribution_forward(kgrid,K,zs,y0_mass,M,T,TR,TT)
-    k0 = 0;     #capital in first period of life
+function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
     nk = length(kgrid);
     nz = length(zs);
 
-    #initializing capital distribution
-    K_dist = zeros(nk,nz,TT);
+    #initializing distribution
+    K_dist = zeros(nk,nz,TT);   #assets
+    C_dist = zeros(nk,nz,TT);   #consumption
+
+    #aggregate variables
+    Ks = zeros(TT);
+    Cs = zeros(TT);
+
     #structures for interpolation
     xqi = zeros(nk);
     xqia = zeros(nk);
     xqpi = zeros(nk);
 
-        #period t=1: agents have k=0 and the initial distribution over productivity z
-    K_dist[1,:,1] .= y0_mass[:];
+    #HH problem to guide update in distribution
+    Cs_sample, As_sample = solveHH(kgrid,Kguess,τguess,zs,M,T,TT);
+
+    #period t=1 distribution
+
+    #allocating agents according to initial capital holding k0
+    loc0, w0 = interpolate1D(k0,kgrid);
+    K_dist[loc0,:,1] .= w0*y0_mass[:];
+    K_dist[loc0+1,:,1] .= (1 - w0)*y0_mass[:];
+    Ks[1] = sum(K_dist[:,:,1].*kgrid);
+    Cs[1] = sum(K_dist[:,:,1].*Cs_sample[:,:,1]);
+
+    #updating distribution
     for t=2:TT
         for iz=1:nz
-            kl_int, kh_int, wl_int = interpolate_coord(kgrid, As[:,iz,t-1], xqi, xqia ,xqpi);
-            for ik=1:nk
-                K_dist[kl_int[ik],:,t] .= K_dist[kl_int[ik],:,t] .+ wl_int[kl_int[ik]].*K_dist[ik,iz,t-1].*M[iz,:]
-                K_dist[kh_int[ik],:,t] .= K_dist[kh_int[ik],:,t] .+ (1 - wl_int[kh_int[ik]]).*K_dist[ik,iz,t-1].*M[iz,:]
-            end
+            locs_low_t, locs_high_t, wt = interpolate_coord(kgrid,As_sample[:,iz,t-1],xqi,xqia,xqpi);
+            K_dist[locs_low_t,:,t] = K_dist[locs_low_t,:,t] .+ K_dist[:,iz,t-1].*wt.*repeat(M[iz,:]',nk,1);
+            K_dist[locs_high_t,:,t] = K_dist[locs_high_t,:,t] .+ K_dist[:,iz,t-1].*(1 .- wt).*repeat(M[iz,:]',nk,1);
         end
+        Ks[t] = sum(K_dist[:,:,t].*kgrid);
+        Cs[t] = sum(K_dist[:,:,t].*Cs_sample[:,:,t]);
     end
-
+    return K_dist, Ks, Cs
 end
 
 ##-----     INTERPOLATIONS FUNCTIONS     -----##

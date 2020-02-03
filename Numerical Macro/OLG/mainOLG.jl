@@ -64,3 +64,12 @@ Kguess = 2.2;       #guessing aggregate capital (= guessing the interest rate)
 ## Steo 3
 wguess = (1-α)*(Kguess/N)^(α);
 bguess = b(Kguess,τguess);
+
+
+
+## Solving HH problem once
+@time Cs_sample, As_sample = solveHH(kgrid,Kguess,τguess,zs,M,T,TT);
+
+## Solving forward for distributions of consumption and asseets given initial
+#  distribution over productivity states y0_mass
+@time K_dist, Ks, Cs = distribution_forward(kgrid,Kguess,τguess,zs,y0_mass,k0,M,T,TT);

@@ -167,13 +167,13 @@ function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
 
     #allocating agents according to initial capital holding k0
     loc0, w0 = interpolate1D(k0,kgrid);
-    K_dist[loc0,:,1] .= w0*y0_mass[:];
-    K_dist[loc0+1,:,1] .= (1 - w0)*y0_mass[:];
+    K_dist[loc0,:,1] .= w0*y0_mass[:]*μs[1];
+    K_dist[loc0+1,:,1] .= (1 - w0)*y0_mass[:]*μs[1];
     Ks[1] = sum(K_dist[:,:,1].*kgrid);
     Cs[1] = sum(K_dist[:,:,1].*Cs_sample[:,:,1]);
 
     #updating distribution
-    for t=2:TT
+    for t=2:24
         for iz=1:nz
             locs_low_t, locs_high_t, wt = interpolate_coord(kgrid,As_sample[:,iz,t-1],xqi,xqia,xqpi);
             K_dist[locs_low_t,:,t] = K_dist[locs_low_t,:,t] .+ Ss[t-1]*K_dist[:,iz,t-1].*wt.*repeat(M[iz,:]',nk,1);
@@ -181,6 +181,7 @@ function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
         end
         Ks[t] = sum(K_dist[:,:,t].*kgrid);
         Cs[t] = sum(K_dist[:,:,t].*Cs_sample[:,:,t]);
+        println(sum(K_dist[:,:,t]) - μs[t])
     end
     return K_dist, Ks, Cs
 end
@@ -207,16 +208,28 @@ end
    -------
    ```
 """
-function clear_markets(kgrid,K,τ,zs,y0_mass,μs,k0,M,T,TT,tol=1e-3,maxiter=1000)
-
-    sol = [0.];
-    function obj_fun!(sol,x)
-        K_dist, Ks, Cs = distribution_forward(kgrid,x[1],x[2],zs,y0_mass,k0,M,T,TT);
-        sol[1] = abs(Ks[:]'*μs[:] - x[1]);
+function clear_markets(kgrid,K,τ,zs,y0_mass,μs,k0,M,T,TT)
+    #=Kold = K;
+    global it = 0;
+    global diff_step = Inf;
+    while (diff_step > tol) && (it<maxiter)
+        K_dist, Ks, Cs = distribution_forward(kgrid,Kold,τguess,zs,y0_mass,k0,M,T,TT);
+        Knew = Ks[:]'*μs[:];
+        global diff_step = abs(Kold - Knew);
+        println("Iteration # "*string(it)*" and improvement "*string(diff_step));
+        global it+=1;
+        global Kold = 0.8*Kold + 0.2*Knew;
+        println(Kold)
+    end=#
+    function obj_fun(x)
+        K_dist, Ks, Cs = distribution_forward(kgrid,x[1],τguess,zs,y0_mass,k0,M,T,TT);
+        #sol = abs(Ks[:]'*μs[:] - x);
+        sol = abs(sum(K_dist.*kgrid) - x);
+        return sol;
     end
 
-    xsol = nlsolve(obj_fun!, [ Kguess; τguess]);
-
+    xsol = find_zero(obj_fun,K);
+    return xsol;
 end
 
 
@@ -310,6 +323,18 @@ function interpolate_coord(x,xq,xqi,xqia,xqpi)
     xqia[(xq .< x[1])] .= xqi[(xq .< x[1])];
 
     return Int.(xqi), Int.(xqia), xqpi;
+end
+
+
+function plot_profile(X,xname,T,TT)
+    figure()
+    plot(20:20+TT-1,X)
+    ys = ylim();
+    vlines(20+T,ys[1],ys[2],linestyle="dotted")
+    xlim(20,20+TT-1);
+    ylim(ys[1],ys[2])
+    xlabel("Age");
+    ylabel(xname);
 end
 
 #=

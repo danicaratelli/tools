@@ -2,7 +2,7 @@
 ## description: mainOLG.jl solves an overlapping generations code as in
 ## Heer-Maussner example 10
 
-using Dierckx, Statistics, PyPlot, Distributions, NLsolve
+using Dierckx, Statistics, PyPlot, Distributions, Roots
 #import Distributions: pdf, Normal, quantile
 ##  Parameters
     #years
@@ -16,6 +16,7 @@ spl = Spline1D(x, Ss[:]);
 Ss = spl(collect(range(20,stop=100,step=1)));
 Ss = min.(Ss,1);
 Ss = [Ss[1:59];0];
+Ss[1:findmax(Ss)[2]] .= 1;
     #productivity profile
 Es = [0.6 1 1.075 1.15 1.08];
 x = [20, 30, 40, 50, 60];
@@ -55,22 +56,34 @@ y0_mass = [y0_mass;1-sum(y0_mass)];             #weight on each element of zgrid
 ## Step 1 (computing aggregate employment)
 μs = [1;map(x->prod(Ss[1:x]),1:TT-1)];
 μs = μs.*(1/sum(μs));
-N = hbar*sum(μs[1:T]);
-
+N = sum(exp.(Es).*Ss[1:T].*μs[1:T]*hbar); #sum(hbar*exp.(Es).*μs[1:T]);
+#sumc(sumc(muy.*exp(ye').*ef))*hbar/sumc(mass[1:t])
 
 ## Step 2 (guesses)
-Kguess = 2.2;       #guessing aggregate capital (= guessing the interest rate)
-τguess = 0.1;       #guessing labor income tax
+Kguess = 5;        #guessing aggregate capital (= guessing the interest rate)
+τguess = 0.12;           #guessing labor income tax
 ## Steo 3
 wguess = (1-α)*(Kguess/N)^(α);
 bguess = b(Kguess,τguess);
 
 
-
 ## Solving HH problem once
-@time Cs_sample, As_sample = solveHH(kgrid,Kguess,τguess,zs,M,T,TT);
+k0 = 0;     #initial capital for new-born groups
+## Find right aggregate capital
+Kstar = clear_markets(kgrid,Kguess,τguess,zs,y0_mass,μs,k0,M,T,TT);
+K_dist, Ks, Cs = distribution_forward(kgrid,Kstar,τguess,zs,y0_mass,k0,M,T,TT);
+#assets age profile
+plot_profile(Ks,"Assets",T,TT);
+#consumption age profile
+plot_profile(Cs,"Consumption",T,TT);
 
-## Solving forward for distributions of consumption and asseets given initial
-#  distribution over productivity states y0_mass
-k0 = 0;
-@time K_dist, Ks, Cs = distribution_forward(kgrid,Kguess,τguess,zs,y0_mass,k0,M,T,TT);
+## Plotting GINI coefficient
+Kdist_all = sum(K_dist,dims=(2,3))[:];
+Kdist_all = Kdist_all./sum(Kdist_all);
+qs = [collect(0:0.1:0.9);0.99;1];
+pcs_workers = quantile(kgrid,Weights(Kdist_all),qs);
+pcs_assets = zeros(length(qs));
+for iq = 1:length(qs)
+    loc_iq = findlast(kgrid.<=pcs_workers[iq]);
+    pcs_assets[iq] = sum(K_dist[1:loc_iq,:,:])/sum(K_dist);
+end

@@ -173,15 +173,30 @@ function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
     Cs[1] = sum(K_dist[:,:,1].*Cs_sample[:,:,1]);
 
     #updating distribution
-    for t=2:24
+    for t=2:TT
         for iz=1:nz
             locs_low_t, locs_high_t, wt = interpolate_coord(kgrid,As_sample[:,iz,t-1],xqi,xqia,xqpi);
-            K_dist[locs_low_t,:,t] = K_dist[locs_low_t,:,t] .+ Ss[t-1]*K_dist[:,iz,t-1].*wt.*repeat(M[iz,:]',nk,1);
-            K_dist[locs_high_t,:,t] = K_dist[locs_high_t,:,t] .+ Ss[t-1]*K_dist[:,iz,t-1].*(1 .- wt).*repeat(M[iz,:]',nk,1);
+                #points on lower bound of interpolation
+            dups_low = findall(diff(locs_low_t).==0) .+ 1;
+            nodup = setdiff(1:nk,dups_low);
+            locs_low_t_nodup = locs_low_t[nodup];
+            K_dist[locs_low_t_nodup,:,t] = K_dist[locs_low_t_nodup,:,t] .+ Ss[t-1]*K_dist[nodup,iz,t-1].*wt[nodup].*repeat(M[iz,:]',length(nodup),1);
+                #taking care of doubles
+            for id in dups_low
+                K_dist[locs_low_t[id],:,t] = K_dist[locs_low_t[id],:,t] .+ Ss[t-1]*K_dist[id,iz,t-1].*wt[id].*M[iz,:];
+            end
+                #points on upper bound of interpolation
+            dups_high = findall(diff(locs_high_t).==0) .+ 1;
+            nodup = setdiff(1:nk,dups_high);
+            locs_high_t_nodup = locs_high_t[nodup];
+            K_dist[locs_high_t_nodup,:,t] = K_dist[locs_high_t_nodup,:,t] .+ Ss[t-1]*K_dist[nodup,iz,t-1].*(1 .- wt[nodup]).*repeat(M[iz,:]',length(nodup),1);
+                #taking care of doubles
+            for id in dups_high
+                K_dist[locs_high_t[id],:,t] = K_dist[locs_high_t[id],:,t] .+ Ss[t-1]*K_dist[id,iz,t-1].*(1 - wt[id]).*M[iz,:];
+            end
         end
         Ks[t] = sum(K_dist[:,:,t].*kgrid);
         Cs[t] = sum(K_dist[:,:,t].*Cs_sample[:,:,t]);
-        println(sum(K_dist[:,:,t]) - μs[t])
     end
     return K_dist, Ks, Cs
 end

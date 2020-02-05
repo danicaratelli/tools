@@ -1,8 +1,6 @@
-##
-
-# constructing grids
-kgrid = collect(range(Kmin,stop=Kmax,length=nk));
-
+## author: daniele caratelli
+## description: helper.jl contained the functions used in mainOLG.jl
+## Heer-Maussner example 10
 
 #useful functions
 function u(c,η)
@@ -32,17 +30,6 @@ end
 w(K) = (1-α)*(K/N)^(α);
 r(K) = α*(K/N)^(α-1) - δ;
 b(τ,K) = (τ*w(K)*N)/sum(μs[T+1:TT]);
-#=function b(K)
-    wtmp = w(K)
-    f(b) = b - 0.3*wtmp*hbar*(1 - (b/(wtmp*N))*sum(μs[T+1:TT]))*sum(μs[1:T].*Es[1:T]);
-    b = find_zero(f, (0, wtmp), Bisection(), atol=1e-8);
-    return b;
-end
-function τ(K)
-    wtmp = w(K);
-    btmp = b(K);
-    return (btmp*sum(μs[T+1:TT]))/(wtmp*N)
-end=#
 
 std_norm_cdf(x::Number) = cdf(Normal(0,1),x);
 
@@ -224,18 +211,6 @@ end
    ```
 """
 function clear_markets(kgrid,K,τ,zs,y0_mass,μs,k0,M,T,TT)
-    #=Kold = K;
-    global it = 0;
-    global diff_step = Inf;
-    while (diff_step > tol) && (it<maxiter)
-        K_dist, Ks, Cs = distribution_forward(kgrid,Kold,τguess,zs,y0_mass,k0,M,T,TT);
-        Knew = Ks[:]'*μs[:];
-        global diff_step = abs(Kold - Knew);
-        println("Iteration # "*string(it)*" and improvement "*string(diff_step));
-        global it+=1;
-        global Kold = 0.8*Kold + 0.2*Knew;
-        println(Kold)
-    end=#
     function obj_fun(x)
         K_dist, Ks, Cs = distribution_forward(kgrid,x[1],τguess,zs,y0_mass,k0,M,T,TT);
         #sol = abs(Ks[:]'*μs[:] - x);
@@ -341,6 +316,7 @@ function interpolate_coord(x,xq,xqi,xqia,xqpi)
 end
 
 
+##-----     AGE PROFILE     -----##
 function plot_profile(X,xname,T,TT)
     figure()
     plot(20:20+TT-1,X)
@@ -352,207 +328,24 @@ function plot_profile(X,xname,T,TT)
     ylabel(xname);
 end
 
-#=
-# Plotting policy functions from the household problem
-function plot_policies(agrid,Kgrid,cpol)
-    #plotting consumption policy function for low and high capital and employed and unemployed
-    close()
+
+##-----     LORENZ CURVE     -----##
+function plot_gini(K_dist,Kall,kgrid,qs)
+    Kdist_all = sum(K_dist,dims=(2,3))[:];
+    Kdist_all = Kdist_all./sum(Kdist_all);
+    #quantiles for assets
+    worker_qnts = map(x->findfirst(cumsum(Kdist_all).>=x),qs);
+
     figure()
-    #low capital
-    subplot(2,1,1)
-    plot(agrid,cpol[1,:,1],label=L"$\epsilon = e$")
-    plot(agrid,cpol[2,:,1],label=L"$\epsilon = u$")
-    title("K = "*string(Kgrid[1]))
+    plot(qs,map(x->sum(Kdist_all[1:x].*kgrid[1:x])/Kall,worker_qnts),marker="*",label="model")
+    plot(qs,qs,marker="s",label="equal distribution")
+    xlabel("proportion of Workers");
+    ylabel("proportion of Asset");
     legend()
-    xticks([])
-    #high capital
-    subplot(2,1,2)
-    plot(agrid,cpol[1,:,end],label=L"$\epsilon = e$")
-    plot(agrid,cpol[2,:,end],label=L"$\epsilon = u$")
-    title("K = "*string(Kgrid[end]))
-    subplots_adjust(hspace=0.5)
-    xlabel("assets")
 end
 
 
-##-----     SIMULATION of STATES     -----##
-"""
-    simul_states(Nsimul)
-
-    Simulate aggregate states (good = 1, bad = 2).
-
-   Inputs:
-   -------
-   ``Nsimul``    :       Integer,   number of simulations\n
-   -------
-"""
-function simul_states(Nsimul)
-    dist_aggregate = Int.(zeros(Nsimul));
-    dist_aggregate[1] = 1;
-    rnd_nums = rand(Nsimul);
-    tmpTmat = cumsum(ΓZ,dims=2);
-    for i=2:Nsimul
-        dist_aggregate[i] = findfirst(rnd_nums[i] .<= tmpTmat[dist_aggregate[i-1],:]);
-    end
-    return dist_aggregate;
-end
-
-"""
-    simul_employment(NN,Nsimul,dist_aggregate)
-
-    Simulate idiosyncratic (i.e. employment) states (employed = 0, unemployed = 1).
-
-   Inputs:
-   -------
-   ``NN``        :       Integer,   number of agents\n
-   ``Nsimul``    :       Integer,   number of simulations\n
-   ``dist_aggregate``    :       array,     simulated aggregate states\n
-   -------
-"""
-function simul_employment(NN,Nsimul,dist_aggregate)
-    #employment distribution over time and workers
-    dist_employment = Int.(zeros(NN,Nsimul));
-    dist_employment[1:Int(floor(ug*NN)),1] .= 1;    #initilization for employed/unemployed
-    rnd_nums = rand(NN,Nsimul);
-    #creating the overall
-    tmpTmats = zeros(2,2,4);
-    tmpTmats[:,:,1] = cumsum(Γgg,dims=2);
-    tmpTmats[:,:,2] = cumsum(Γbb,dims=2);
-    tmpTmats[:,:,3] = cumsum(Γgb,dims=2);
-    tmpTmats[:,:,4] = cumsum(Γbg,dims=2);
-    for i=2:Nsimul
-        if dist_aggregate[i-1]==1 && dist_aggregate[i]==1
-            tmpTmat = tmpTmats[:,:,1];
-        elseif dist_aggregate[i-1]==2 && dist_aggregate[i]==2
-            tmpTmat = tmpTmats[:,:,2];
-        elseif dist_aggregate[i-1]==1 && dist_aggregate[i]==2
-            tmpTmat = tmpTmats[:,:,3];
-        elseif dist_aggregate[i-1]==2 && dist_aggregate[i]==1
-            tmpTmat = tmpTmats[:,:,4];
-        end
-
-        tmats = tmpTmat[1 .+ dist_employment[:,i-1],:];
-        dist_employment[:,i] = map(x->findfirst(rnd_nums[x,i].<tmats[x,:]),1:NN) .- 1;
-    end
-    return dist_employment;
-end
-
-
-##-----     SIMULATE ASSETS     -----##
-"""
-    simulate_HH_assets(NN,Nsimul,astart,dist_aggregate,dist_employment,apol,Kgrid,agrid)
-
-    Simulate individual agent's distribution of assets and the corresponding
-    aggregate capital path.
-
-   Inputs:
-   -------
-   ``NN``               :       Integer,   number of agents\n
-   ``Nsimul``           :       Integer,   number of simulations\n
-   ``astart``           :       Number,    initial asset holdings of each agent\n
-   ``dist_aggregate``   :       array,     simulated aggregate states\n
-   ``dist_employment``  :       array,     simulated idiosyncratic states\n
-   ``aold``             :       array (2*nZ,na,nk),  asset policy fnct\n
-   ``Kgrid``            :       array (nk),  grid for capital\n
-   ``agrid``            :       array (na),  grid for assets\n
-   -------
-"""
-function simulate_HH_assets(NN,Nsimul,astart,dist_aggregate,dist_employment,apol,Kgrid,agrid)
-    #simulating using the HH policies to get aggregate capital in each period
-    Kpath = zeros(Nsimul);
-    asset_sim = zeros(NN,Nsimul);
-    xfill1 = Int.(zeros(NN));
-    xfill2 = Int.(zeros(NN));
-    xfill3 = zeros(NN);
-    asset_sim[:,1] .= astart;
-
-
-    for i=2:Nsimul
-        Klast = mean(asset_sim[:,i-1]);
-        Kpath[i-1] = Klast;
-        locK, wK = interpolate1D(Klast,Kgrid);
-        #locas, was = interpolate2D(asset_sim[:,i-1],agrid);
-        locas, locasH, was = interpolate_coord(agrid,asset_sim[:,i-1],xfill1,xfill2,xfill3);
-
-        x_indxs = 2*(dist_aggregate[i-1]-1) + 1;
-
-        #getting the individual components
-        #low asset low K
-        A_alow_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK];
-
-        #high assets and low capital
-        A_ahigh_Klow = dist_employment[:,i-1].*apol[x_indxs+1,locasH,locK] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locasH,locK];
-
-        #low assets and high capital
-        A_alow_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locas,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locas,locK+1];
-
-        #high assets and high capital
-        A_ahigh_Khigh = dist_employment[:,i-1].*apol[x_indxs+1,locasH,locK+1] .+ (1 .- dist_employment[:,i-1]).*apol[x_indxs,locasH,locK+1];
-
-        asset_sim[:,i] = (was*wK).*A_alow_Klow .+ (was*(1-wK)).*A_alow_Khigh .+ ((1 .- was)*wK).*A_ahigh_Klow .+ ((1 .- was)*(1-wK)).*A_ahigh_Khigh;
-    end
-    return asset_sim, Kpath;
-end
-
-
-##-----     ESTIMATE Law of Motion for CAPITAL     -----##
-"""
-    estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,cpolguess,tol=1e-3,maxiter=20)
-
-    Estimate coefficient of capital law of motion by iteration.
-
-   Inputs:
-   -------
-   ``agrid``             :       array (na),  grid for assets\n
-   ``Kgrid``             :       array (nk),  grid for capital\n
-   ``Hmat``              :       array (nZ,nZ),   law of motion parameters\n
-   ``Zs``                :       array (nZ),  aggregate productivities\n
-   ``dist_aggregate``    :       array,     simulated aggregate states\n
-   ``dist_idiosyncratic``:       array,     simulated idiosyncratic states\n
-   ``Ngarbage``          :       Integer,   number of period to discard\n
-   ``cpolguess``         :       array (2*nZ,na,nk),  guess of consumption policy fnct\n
-       --- optional inputs:\n
-    ``tol``      :       Number,  algorithm tolerance\n
-    ``maxiter``  :       Integer,  maximum number of iterations\n
-   -------
-"""
-function estimate_LOM(agrid,Kgrid,Hmat,Zs,dist_aggregate,dist_idiosyncratic,Ngarbage,cpolguess,tol=1e-3,maxiter=20)
-
-    NN, Nsimul = size(dist_idiosyncratic);
-    itnum = 0;
-    dist = Inf;
-    dist_aggregate_clean = dist_aggregate[Ngarbage:Nsimul-2];
-        #good state
-    ig = findall(dist_aggregate_clean.==1);
-        #bad state
-    ib = findall(dist_aggregate_clean.==2);
-
-    while dist>tol && itnum<maxiter
-        #policy function for household
-        cpol, apol, tol_res, iter_res = solveHH(agrid,Kgrid,Zs,Hmat,cpolguess);
-        cpolguess = copy(cpol);
-        #simulation of distributions
-        A_sim, Kpath = simulate_HH_assets(NN,Nsimul,5,dist_aggregate,dist_idiosyncratic,apol,Kgrid,agrid);
-        Kpath_clean = Kpath[Ngarbage:Nsimul-1]; #selecting relevant periods
-        #updating LOM of capital
-        lom_params_good = [ones(length(ig)) log.(Kpath_clean[ig])]\log.(Kpath_clean[ig.+1]);
-        lom_params_bad = [ones(length(ib)) log.(Kpath_clean[ib])]\log.(Kpath_clean[ib.+1]);
-        Hmat_new = [lom_params_good'; lom_params_bad'];
-
-        dist = maximum(abs.(Hmat_new .- Hmat));
-        if (itnum%1)==0
-            println("Iteration = "*string(itnum)*";      dist = "*string(dist));
-        end
-        itnum += 1;
-        Hmat = 0.5*Hmat_new + 0.5*Hmat;
-    end
-
-    return Hmat, dist, itnum;
-end
-
-=#
-
-##-----     TAUCHEN DISCRETIZATION     -----##
+##-----     TAUCHEN DISCRETIZATION (taken from Quantecon)     -----##
 """
     tauchen(N::Integer, ρ::T1, σ::T2, μ=zero(promote_type(T1, T2)), n_std::Integer=3)
 

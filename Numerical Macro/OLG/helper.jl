@@ -163,6 +163,10 @@ function distribution_forward(kgrid,K,τ,zs,y0_mass,k0,M,T,TT)
     for t=2:TT
         for iz=1:nz
             locs_low_t, locs_high_t, wt = interpolate_coord(kgrid,As_sample[:,iz,t-1],xqi,xqia,xqpi);
+
+            ## Note 4/1/2010: Instead of separating the repeated indices, use
+            ## @views, can do it all at once and is much quickers. Check it out!
+
                 #points on lower bound of interpolation
             dups_low = findall(diff(locs_low_t).==0) .+ 1;
             nodup = setdiff(1:nk,dups_low);

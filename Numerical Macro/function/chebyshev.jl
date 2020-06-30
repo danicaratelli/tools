@@ -1,3 +1,7 @@
+# Defining functions to map between [a,b]->[-1,1] (X) & between [-1,1]->[a,b] (Z)
+X(z,a,b) = (2z)./(b-a) .- (a + b)/(b-a);
+Z(x,a,b) = (x .+ 1).*(b-a)/2 .+ a;
+
 """
 Computes n many Chebyshev nodes
 """
@@ -130,7 +134,7 @@ Evaluates a Chebyshev approximation given coefficients for the polynomial
     ```
 """
 function Cheby_eval(coffs,T_deg,xs)
-    nvars = size(xs,1);
+    nvars = size(xs,1);    
     nnodes = map(x->length(xs[x]),1:nvars);
     ns = size(coffs);
     k = ns[1];

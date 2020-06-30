@@ -1,7 +1,6 @@
 """
-Computes n many Chebyshev nodes 
+Computes n many Chebyshev nodes
 """
-
 function chebynodes(n)
     ns = map(x->cos((2x-1)*π/2n),1:n);
     return sort(ns);
@@ -11,7 +10,6 @@ end
 """
 Evaluates a Chebyshev polynomial of degree k at each entry of array y
 """
-
 function Tcheb(y,k)
     Tj0 = ones(length(y));
     Tj1 = y;
@@ -39,7 +37,6 @@ end
 Forms all possible combinations of elements in the grids contained in xs
 	Input: 	xs: 	tuple of grids to be combines
 """
-
 function combine_vecs(xs)
     nvars = length(xs);                     #number of vectors in question
     nxs = map(x->length(xs[x]),1:nvars);    #length of each vector
@@ -61,14 +58,19 @@ end
 
 
 """
-Computes Chebyshev coefficients (assuming collocation) for any number of state variables
-	Input: 	ns: 		tuple for each dimension of the state space
-		Ys: 		Function of interest evaluated at fnodes  
-		fnodes: 	array containing the nodes (Chebyshev nodes) at which Ys is evaluated
-	Output:	coffs:		coefficients of Chebyshev approximation
-		vec_locs:	combination of all grid point elements in 2D array
+Computes Chebyshev coefficients (assuming collocation) for any number of state variables\n
+	Input:
+    -------
+    `ns`: 		tuple for each dimension of the state space\n
+	``Ys``: 		Function of interest evaluated at fnodes\n
+	``fnodes``: 	array containing the nodes (Chebyshev nodes) at which Ys is evaluated\n
+    -------
+	Output:
+    -------
+    ``coffs``:		coefficients of Chebyshev approximation\n
+	``vec_locs``:	combination of all grid point elements in 2D array\n
+    -------
 """
-
 function chebycoeffs(ns,Ys,fnodes)
     ndim = length(ns);
     nvert = prod(ns);
@@ -91,10 +93,10 @@ function chebycoeffs(ns,Ys,fnodes)
     coffs[1] = mean(Ys);
     #including non-Cheby related term
     to_rem = (vec_locs.==1);
-    coffs[2:end] = ((1/k)^ndim).*2.^(ndim.-sum(to_rem[2:end,:],dims=2));
+    coffs[2:end] = ((1/k)^ndim).*(2 .^(ndim.-sum(to_rem[2:end,:],dims=2)));
 
     for j=2:nvert
-        to_cheb = setdiff(1:ndim,find(to_rem[j,:]));    #those dimensions for which
+        to_cheb = setdiff(1:ndim,findall(to_rem[j,:]));    #those dimensions for which
         #we need to evaluate Chebyshev polynomial
         cheby_prod = ones(nvert,1);
         for jj in to_cheb
@@ -111,11 +113,22 @@ end
 
 """
 Evaluates a Chebyshev approximation given coefficients for the polynomial
-	Input: 	coffs: 	coefficients of polynomial (see chebycoeffs) 
-		T_deg: 	combination of all grid point elements in 2D array
-		xs: 	tuple of arrays at which polynomial is evaluated
+	Input:\n
+    -----
+    coffs: 	coefficients of polynomial (see 1st output of chebycoeffs)\n
+	T_deg: 	combination of all grid point elements in 2D array (see 2nd output of chebycoeffs)\n
+	xs: 	tuple of arrays at which polynomial is evaluated\n
+    -----
+    # Example\n
+    ```
+    julia> f(x,y) = sin(x) + cos(y)
+    julia> ns = (5,5); fnodes = (chebynodes(5),chebynodes(5));
+    julia> Ys = sin.(Z(fnodes[1],0,1)) .+ (cos.(Z(fnodes[1],0,1)))';
+    julia> coffs,vec_locs = chebycoeffs(ns,Ys,fnodes);
+    julia> xs = (collect(-1:0.01:1),collect(-1:0.01:1));
+    julia> F_hat = Cheby_eval(coffs,vec_locs,xs)
+    ```
 """
-
 function Cheby_eval(coffs,T_deg,xs)
     nvars = size(xs,1);
     nnodes = map(x->length(xs[x]),1:nvars);
@@ -147,5 +160,3 @@ function Cheby_eval(coffs,T_deg,xs)
         return r;
     end
 end
-
-

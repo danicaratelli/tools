@@ -5,7 +5,7 @@ pygui(true);
 
 #Projection options:
 include("chebyshev.jl");
-ncheby = 6;     #number of Chebyshev nodes
+ncheby = 5;     #number of Chebyshev nodes
 ndim = 2;       #number of state variables (capital and productivity)
 
 #Parameters
@@ -15,23 +15,30 @@ ndim = 2;       #number of state variables (capital and productivity)
 ν = 0.5;    #labor-consumption elasticity
 γ = 2;      #inverse EIS
 #tauchen productivity shocks
-σ = 1;      #variance of productivity shocks
+σ = 0.007;      #variance of productivity shocks
 λ = 0.9;    #persistence of productivity shocks
-Π, zgrid = tauchen(5, λ, σ); zgrid = collect(zgrid);
+
 #grid boundaries
 kmin = 1e-3; kmax = 20; kgrid = collect(range(kmin,stop=kmax,length=100));
-zmin = zgrid[1]; zmax = zgrid[end];
+zmin = -0.8; zmax = 0.8;
 
 #Step 1: guess labor policy function by guessing coefficients
 knodes = chebynodes(ncheby); #nodes for capital
 ks = Z(knodes,kmin,kmax);
 znodes = chebynodes(ncheby); #nodes for productivity
 zs = Z(znodes,zmin,zmax);
-coeff_guess = zeros(ncheby,ncheby);
-coeff_guess[1] = 0.5;
+zgrid = copy(zs);
+#tauchen -> transition matrix
+Π, zs = tauchen_mine(zs, λ, σ);
+
+#labor policy function
+#guess a constant labor = 0.33
+lguess = 0.5*ones(ncheby,ncheby);
+
+coeff_guess, vec_locs = chebycoeffs((ncheby,ncheby),lguess,(knodes,znodes));
+lfun(coeff,ks,zs) = Cheby_eval(coeff,T_deg,(X(ks,kmin,kmax),X(zs,zmin,zmax)));
 
 #Step 2: solve for consumption policy using static FOC
-lfun(coeff,ks,zs) = Cheby_eval(coeff,T_deg,(X(ks,kmin,kmax),X(zs,zmin,zmax)));
 function cfun(coeff,ks,zs)
     #vectorized states (k and z)
     v_states = combine_vecs((ks,zs));
@@ -42,49 +49,66 @@ function cfun(coeff,ks,zs)
 end
 
 #Step 3: define residual (dynamic FOC)
-function res(coeff,cpol,lpol,ks,zs,ntauchen)
+lpol = lfun(coeff_guess,ks,zs);
+cpol = cfun(coeff_guess,ks,zs);
+function res(coeff,cpol,lpol,ks,zs,Π)
     nk = length(ks);
     nz = length(zs);
 
     #RHS of Euler Equation
     v_vars = [cpol[:] lpol[:]];
     v_states = combine_vecs((ks,zs));
-    RHS = ν*(1 .- v_vars[:,2]).^((1-ν)*(1-γ)) .* (v_vars[:,1]).^(ν*(1-γ)+1);
+    RHS = ν*(1 .- v_vars[:,2]).^((1-ν)*(1-γ)) .* (v_vars[:,1]).^(ν*(1-γ)-1);
     RHS = reshape(RHS,nk,nz);
     #LHS of Euler Equation
     knext = exp.(v_states[:,2]) .* v_states[:,1].^(α) .* v_vars[:,2].^(1-α) .+ (1-δ).*v_states[:,1] .- v_vars[:,1];
-    lnext = lfun(coeff,knext,zs);
-    cnext = cfun(coeff,knext,zs);
-    v_vars_next = [cnext[:] lnext[:]];
-    v_states_next = combine_vecs((knext,zs));
-    LHS1 = ((1-δ).+ α*exp.(v_states_next[:,2]).*(v_states_next[:,1]).^(α-1).*(v_vars_next[:,2]).^(α))
-    LHS2 = ν*(1 .- v_vars_next[:,2]).^((1-ν)*(1-γ)) .* (v_vars_next[:,1]).^(ν*(1-γ)+1);
-    LHS = LHS2.*LHS1;
-    LHS = reshape(LHS,(nk,nz,ntauchen));
-    #computing E[LHS]
-    E_LHS = zeros(nk,nz);
-    for i=1:ntauchen
-        E_LHS[:,i] .+= LHS[:,:,i]*Π[1,:];
+    #@assert(sum(knext.<0)==0,"Negative capital: problem with either coefficient guess or boundaries.")
+    if sum(knext.<0)==0
+        lnext = lfun(coeff,knext,zs);
+        cnext = cfun(coeff,knext,zs);
+        v_vars_next = [cnext[:] lnext[:]];
+        v_states_next = combine_vecs((knext,zs));
+        LHS1 = ((1-δ) .+ α*exp.(v_states_next[:,2]).*(v_states_next[:,1]).^(α).*(v_vars_next[:,2]).^(-α));
+        LHS2 = ν*(1 .- v_vars_next[:,2]).^((1-ν)*(1-γ)) .* (v_vars_next[:,1]).^(ν*(1-γ)-1);
+        LHS = LHS2.*LHS1;
+        LHS = reshape(LHS,(nk,nz,nz));
+        #computing E[LHS]
+        E_LHS = zeros(nk,nz);
+        for i=1:nz
+            E_LHS[:,i] .+= LHS[:,:,i]*Π[i,:];
+        end
+        resid = ((RHS .- β*E_LHS).^2)[:];
+    else
+        resid = [1e6];
     end
-
-    resid = ((RHS .- E_LHS).^2)[:];
 end
 
 T_deg = combine_vecs((collect(1:ncheby),collect(1:ncheby)));
 
 
-function solve_projection(Π,knodes,znodes)
+function solve_projection(coeff_guess,Π,knodes,znodes,kgrid,zs)
     nk = length(knodes);
     nz = length(znodes);
-    coeff_guess = zeros(nk,nz); coeff_guess[1] = 0.2;
+    #coeff_guess = zeros(nk,nz); coeff_guess[1] = 0.4;
 
-    Fres = [zeros(1)];
+    Fres = [100.];
     function objfun!(Fres,x)
-
+        coff_it = reshape(x,(nk,nz));
+        #println("here")
+        #println(coff_it[1])
+        lpol = lfun(coff_it,kgrid,zs);
+        if sum(lpol.<=0)==0
+            cpol = cfun(coff_it,kgrid,zs);
+            res_it = res(coff_it,cpol,lpol,kgrid,zs,Π);
+            Fres[1] = maximum(res_it);
+        else
+            Fres[1] = 1e6;
+        end
+        #println(maximum(Fres))
     end
-
+    xsol = nlsolve(objfun!,coeff_guess[:],iterations=2,show_trace=true,xtol=1e-6,ftol=1e-10);
+    return xsol;
 end
-
 
 
 function clear_markets(agrid,thetas,y0_mass,a0,pars)
@@ -119,10 +143,10 @@ function clear_markets(agrid,thetas,y0_mass,a0,pars)
     return xsol;
 end
 
-function tauchen(N::Integer, ρ::T1, σ::T2, μ=zero(promote_type(T1, T2)), n_std::Integer=3) where {T1 <: Real, T2 <: Real}
+#NEED TO REWRITE THIS TO ACCOUNT FOR specific nodes...
+function tauchen_mine(y::Array{Float64,1}, ρ::T1, σ::T2, μ=zero(promote_type(T1, T2)), n_std::Integer=3) where {T1 <: Real, T2 <: Real}
     # Get discretized space
-    a_bar = n_std * sqrt(σ^2 / (1 - ρ^2));
-    y = range(-a_bar, stop=a_bar, length=N);
+    N = length(y);
     d = y[2] - y[1]
 
     # Get transition probabilities

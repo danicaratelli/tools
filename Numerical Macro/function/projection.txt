@@ -1,0 +1,222 @@
+## Helper functions
+
+#Find Chebyshev nodex:
+function chebynodes(n)
+    ns = map(x->cos((2x-1)*p/2n),1:n);
+    return sort(ns);
+end
+
+
+function Tcheb(y,k)
+    Tj0 = ones(length(y));
+    Tj1 = y;
+    if k==0
+        res =  Tj0;
+    elseif k==1
+        res = Tj1;
+    else
+        for j=2:k
+            Tj = 2*y.*Tj1 .- Tj0;
+            Tj0 = copy(Tj1);
+            Tj1 = copy(Tj);
+        end
+        res = Tj1;
+    end
+    if length(res)==1
+        return res[1];
+    else
+        return res;
+    end
+end
+
+function chebycoeffs2D(n1,n2,Ys,fnodes1,fnodes2)
+    coffs = zeros(n1+1,n2+1);
+    coffs[1,1] = mean(Ys);
+    for j1=1:n1+1
+        for j2=1:n2+1
+            if j1==1 && j2==1
+                continue;
+            elseif j1==1
+                coffs[j1,j2] = 2*sum(Ys*Tcheb(fnodes2,j2-1))/(n1*n2);
+            elseif j2==1
+                coffs[j1,j2] = 2*sum(Tcheb(fnodes1,j1-1)'*Ys)/(n1*n2);
+            else
+                coffs[j1,j2] = 4*sum(Tcheb(fnodes1,j1-1)'*Ys*Tcheb(fnodes2,j2-1))/(n1*n2);
+            end
+        end
+    end
+    return coffs;
+end
+
+function Fs2D(coffs,x,y)
+    xdim = length(x);
+    ydim = length(y);
+    if xdim == 1 || ydim ==1
+        if xdim == 1 && ydim == 1
+            r = 0;
+        else
+            r = zeros(max(xdim,ydim));
+        end
+        for i=1:size(coffs,1)
+            for j=1:size(coffs,2)
+                r = r .+ coffs[i,j].*Tcheb(x,i-1).*Tcheb(y,j-1);
+            end
+        end
+    else
+        r = zeros(xdim,ydim);
+        for i=1:size(coffs,1)
+            for j=1:size(coffs,2)
+                r = r .+ coffs[i,j].*repeat(Tcheb(x,i-1),1,ydim).*repeat(Tcheb(y,j-1)',xdim,1);
+            end
+        end
+    end
+    return r;
+end
+
+function Funcheb2D(f::Function,n1,n2,xs,ys)
+    N1 = length(xs);
+    N2 = length(ys);
+    #support of interest
+    xlow = xs[1]; xhigh = xs[end];
+    ylow = ys[1]; yhigh = ys[end];
+
+    #chebyshev nodes and transformed (over pertinent support)
+    fnodes1 = chebynodes(n1); fnodes2 = chebynodes(n2);
+    z(x,a,b) = (x.+1)*(b-a)/2 .+ a;
+    x(z,a,b) = 2*z/(b-a) - (b+a)/(b-a);
+    znodes1 = z(fnodes1,xlow,xhigh);
+    znodes2 = z(fnodes2,ylow,yhigh);
+
+    #evaluation of actual function at nodes
+    Ys = zeros(n1,n2);
+    for i1 = 1:n1
+        for i2 = 1:n2
+            Ys[i1,i2] = f(znodes1[i1],znodes2[i2]);
+        end
+    end
+    #get polynomial coefficients
+    coffs = chebycoeffs2D(n1,n2,Ys,fnodes1,fnodes2);
+
+    #evaluating approximation
+    xs_normalized = x(xs,xlow,xhigh);
+    ys_normalized = x(ys,ylow,yhigh);
+
+    FC = zeros(N1,N2)
+    for i=1:N1
+        for j=1:N2
+            FC[i,j] = Fs2D(coffs,xs_normalized[i],ys_normalized[j]);
+        end
+    end
+
+    return FC, coffs;
+end
+
+function cheby2D_eval(x,y,coffs)
+    nx = length(x);
+    ny = length(y);
+    X = zeros(nx,ny);
+    for i=1:nx
+        for j=1:ny
+            X[i,j] =  Fs2D(coffs,x[i],y[j])
+        end
+    end
+    return X;
+end
+
+function cheby1D_eval(x,coffs)
+    nx = length(x);
+    X = zeros(nx);
+    for i=1:nx
+        X[i] =  Fs1D(coffs,x[i])
+    end
+    return X;
+end
+
+
+function fapprox(f::Function,xtup,ytup,N1,N2)
+    #support of interest
+    xlow = xtup[1]; xhigh = xtup[2];
+    ylow = ytup[1]; yhigh = ytup[2];
+
+    #evaluating approximation (discrete)
+    xs = collect(range(xtup[1],stop=xtup[2],length=N1));
+    ys = collect(range(ytup[1],stop=ytup[2],length=N2));
+    FA = zeros(N1,N2);
+    for i=1:N1
+        for j=1:N2
+            FA[i,j] = f(xs[i],ys[j]);
+        end
+    end
+    return FA;
+end
+
+
+function Fs1D(coffs,x)
+    r = zeros(length(x));
+    for i=1:size(coffs,1)
+        r = r .+ coffs[i].*(Tcheb(x,i-1));
+    end
+    return r;
+end
+
+
+function chebycoeffs1D(n,Ys,fnodes)
+    coffs = zeros(n+1);
+    coffs[1] = mean(Ys);
+    for j=2:n+1
+        coffs[j] = 2*sum(Ys.*Tcheb(fnodes,j-1))/n;
+    end
+    return coffs;
+end
+
+
+function Funcheb1D(f::Function,n,xs)
+    #support of interest
+    N = length(xs);
+    xlow = xs[1]; xhigh = xs[end];
+
+    #chebyshev nodes and transformed (over pertinent support)
+    fnodes = chebynodes(n);
+    z(x,a,b) = (x.+1)*(b-a)/2 + a;
+    x(z,a,b) = 2*z/(b-a) - (b+a)/(b-a);
+    znodes = z(fnodes,xlow,xhigh);
+
+    #evaluation of actual function at nodes
+    Ys = zeros(n);
+    for i = 1:n
+        Ys[i] = f(znodes[i]);
+    end
+    #get polynomial coefficients
+    coffs = chebycoeffs1D(n,Ys,fnodes);
+
+    #evaluating approximation
+    xs_normalized = x(xs,xlow,xhigh);
+    FC = zeros(N)
+    for i=1:N
+        FC[i] = Fs1D(coffs,xs_normalized[i]);
+    end
+
+    return FC, coffs;
+end
+
+
+#create polynomial
+function poly1D(coeffs)
+    p = 0;
+    for j=1:length(coeffs)
+        p = p + coeffs[j]*a^(j-1);
+    end
+    return p;
+end
+
+function poly2D(coeffs)
+    p = 0;
+    I,J = size(coeffs);
+    for i=1:I
+        for j=1:J
+            p = p + coeffs[j]*a^(i-1)*b^(j-1);
+        end
+    end
+    return p;
+end
+

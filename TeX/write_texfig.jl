@@ -34,7 +34,8 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
        #individual plots
        for i=1:num_plots
            A = F[i]; #ith figure
-           xmin = A[1,1]; xmax = A[end,1];
+           if isnothing(specs["xmin"]); xmin = A[1,1]; else; xmin = specs["xmin"]; end;
+           if isnothing(specs["xmax"]); xmax = A[end,1]; else; xmax = specs["xmax"]; end;
            write(fileID,"\\pgfmathsetmacro{\\xmin}{"*string(xmin)*"};\n");
            write(fileID,"\\pgfmathsetmacro{\\xmax}{"*string(xmax)*"};\n");
            write(fileID,"\\nextgroupplot[ylabel={"*specs["ylabs"][i]*"}, xlabel={"*specs["xlabs"][i]*"},
@@ -74,6 +75,8 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
        write(fileID,"\\end{center}\n");
        if !isnothing(cap)
            write(fileID,"\\caption{"*cap*"}\n");
+       else
+           write(fileID,"\\caption[Entry for the List of Figures (LoF)]{}\\label{fig:without}");
        end
        write(fileID,"\\end{figure}");
     end

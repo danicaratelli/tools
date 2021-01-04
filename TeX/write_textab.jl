@@ -1,4 +1,4 @@
-"""  
+"""
    # Description
    writes a Julia DataFrame table to a .tex table in LaTeX
 
@@ -14,7 +14,7 @@
    - .tex table will be written to file.
 """
 
-function write_tex(filename, tab, caption="", style="", num_prec=2,linesep="\\hline")
+function write_textab(filename, tab, caption="", style="", num_prec=2,linesep="\\hline")
     nrows = size(tab,1); ncols = size(tab,2);
     col_names = names(tab);
     col_names = map(x->string(col_names[x]),1:ncols);
@@ -42,7 +42,7 @@ function write_tex(filename, tab, caption="", style="", num_prec=2,linesep="\\hl
         for i=1:nrows
             for j=1:ncols
                 if typeof(tab[i,j])<:Number
-                    tmp_entry = string(round(tab[i,j],num_prec));
+                    tmp_entry = string(round(tab[i,j],digits=num_prec));
                 else
                     tmp_entry = tab[i,j];
                 end

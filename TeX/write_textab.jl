@@ -7,6 +7,7 @@
    - `tab::DataFrames.DataFrame`: table to be written to file.
    - `caption::String`: (optional) caption for table.
    - `style::String`: (optional) table style, e.g. "c|ccc".
+   - `label::String`: (optional) label for table (if nothing -> no label).
    - `num_prec::Int64`: (optional) numerical precision of numbers in table.
    - `linesep::String`: (optional) add "" if you do not want rows to be separated.
 
@@ -14,14 +15,14 @@
    - .tex table will be written to file.
 """
 
-function write_textab(filename, tab, caption="", style="", num_prec=2,linesep="\\hline")
+function write_textab(filename, tab, caption="", style="", label=nothing, num_prec=2,linesep="\\hline")
     nrows = size(tab,1); ncols = size(tab,2);
     col_names = names(tab);
     col_names = map(x->string(col_names[x]),1:ncols);
     if style==""
         style = "@{}"*repeat("l",ncols)*"@{}";
     end
-    open(filename*".tex","w") do f
+    Base.open(filename*".tex","w") do f
         write(f,"\\begin{table}[htpb!]\r\n");
         write(f,"\\centering\r\n");
         write(f,"\\renewcommand{\\arraystretch}{1.2}\r\n")
@@ -59,8 +60,10 @@ function write_textab(filename, tab, caption="", style="", num_prec=2,linesep="\
         write(f,tablebod);
         write(f,"\\end{tabular}\r\n");
         write(f,"\\caption{"*caption*"} \r\n");
-        write(f,"\\label{"*filename*"} \r\n");
+        if !isnothing(label)
+            write(f,"\\label{"*label*"} \r\n");
+        end
         write(f,"\\end{table}\r\n");
     end
-    close(filename*".tex")
+    #Base.close(fl)
 end

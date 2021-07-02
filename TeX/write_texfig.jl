@@ -14,7 +14,7 @@
    -------
    ```
 """
-function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
+function write_texfig(F,filename,rs,cs,specs,scale,izero,ivert,fontsz,cap)
     #This file allows to write a .tex file for every individual plot
     #xlabs,ylabs,titles,legs,cols,szs,linestyles
     num_plots = length(F);
@@ -24,7 +24,7 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
     open(filename*".tex","w") do fileID
        write(fileID,"\\begin{figure}[htpb!]\n");
        write(fileID,"\\begin{center}\n");
-       write(fileID,"\\textbf{\\fontsize{"*string(specs["title_font"])*"}{0} \\selectfont "*specs["titles"]*"}\\par\\medskip")
+       write(fileID,"\\textbf{\\fontsize{"*string(specs["title_font"])*"}{0} \\selectfont "*specs["titles"]*"}\\par\\medskip\n")
        write(fileID,"\\begin{tikzpicture}[scale="*string(scale)*", transform shape]\n");
        write(fileID,"\\pgfplotsset{every tick label/.append style={font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*"}};\n");
        write(fileID,"\\pgfplotsset{y tick label style={  font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*", /pgf/number format/precision=3,/pgf/number format/fixed}};\n");
@@ -40,15 +40,28 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
            write(fileID,"\\pgfmathsetmacro{\\xmax}{"*string(xmax)*"};\n");
            write(fileID,"\\nextgroupplot[ylabel={"*specs["ylabs"][i]*"}, xlabel={"*specs["xlabs"][i]*"},
                 xmin=\\xmin, xmax=\\xmax, tick label style={/pgf/number format/fixed},
-                legend style={draw=none}, legend style={legend pos=north east},
+                legend style={draw=none}, legend style={legend pos=south east},
                 legend columns=1,font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*"];\n");
             for j=2:size(A,2)
                 strj = "coordinates {";
                 for k=1:size(A,1)
-                    strj = strj*"("*string(A[k,1])*","*string(A[k,j])*")";
+                    if ivert && j==size(A,2)-1
+                        xcoor = "0";
+                    else
+                        xcoor = string(A[k,1]);
+                    end
+                    strj = strj*"("*xcoor*","*string(A[k,j])*")";
                 end
                 strj = strj*"}";
-                write(fileID,"\\addplot["*specs["linestyles"][i,j-1]*", line width="*string(specs["szs"][i,j-1])*"pt, mark=none, "*specs["cols"][i,j-1]*"] "*strj*";\n");
+                if  isequal(specs["legs"][j-1],"")
+                    write(fileID,"\\addplot["*specs["linestyles"][i,j-1]*", line width="*string(specs["szs"][i,j-1])*"pt, mark=none, "*specs["cols"][i,j-1]*", name path="*specs["path_names"][j-1]*",forget plot] "*strj*";\n");
+                else
+                    write(fileID,"\\addplot["*specs["linestyles"][i,j-1]*", line width="*string(specs["szs"][i,j-1])*"pt, mark=none, "*specs["cols"][i,j-1]*", name path="*specs["path_names"][j-1]*"] "*strj*";\n");
+                end
+                #including confidence intervals
+                if !isempty(specs["shades"][j-1])
+                    write(fileID,"\\tikzfillbetween[\n of="*specs["shades"][j-1]*"\n] {color="*specs["shade_cols"][j-1]*",semitransparent};\n");
+                end
             end
             if !isnothing(specs["legs"]) && i == specs["leg_pos"]
                 if izero == 1
@@ -57,10 +70,13 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,fontsz,cap)
                     j_end = size(A,2);
                 end
                 for j=2:j_end
-                    write(fileID,"\\addlegendentry{"*specs["legs"][j-1]*"\\,\\,};\n");
+                    if !isequal(specs["legs"][j-1],"")
+                        write(fileID,"\\addlegendentry{"*specs["legs"][j-1]*"\\,\\,};\n");
+                    end
                 end
             end
        end
+
        write(fileID,"\\end{groupplot};\n");
 
        # Add titles

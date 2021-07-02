@@ -4,33 +4,33 @@
 
 \documentclass[12pt,aspectratio=169]{beamer}
 %\documentclass[12pt,handout]{beamer}
-
+\usepackage{mathrsfs}
+\usepackage{bbm}
 % If you want to print handouts
 %\documentclass[handout]{beamer}
 
 % Changing the fonts: this will make the slides more readable and the math look like regular tex math
-\usefonttheme{serif}
+%\usefonttheme{serif}
+\usepackage{mathpazo}
 \usepackage{tikz}
+\usetikzlibrary{patterns}
 \usepackage{bm}
 \usepackage{appendixnumberbeamer}
 \usepackage{pgfpages}
 \usepackage{pgfplots}
-\usepgfplotslibrary{groupplots}
+\usepackage{eurosym}
+\usepackage{color, colortbl}
+\usepackage{adjustbox}
 \usepackage{transparent}
 \usepackage{caption}
+
 \setbeamercolor{page number in head/foot}{fg=red}
-%\setbeamercolor{caption name}{fg=red}
-%\DeclareCaptionFont{myred}{red}
-%\setbeameroption{show notes on second screen=right} % Both
-%\setbeamertemplate{note page}{\pagecolor{yellow!5}\insertnote}\usepackage{palatino}
-% Titles will appear in Small Cap Serif
-%\usefonttheme{structuresmallcapsserif}
-% -----------------------------------------
-% Color Definition
-% -----------------------------------------
+
 
 \definecolor{red}{rgb}{0.549019608,0.082352941,0.082352941}%{0.4471,0.55765,0.7961}
 \definecolor{gray}{rgb}{0.301960784, 0.309803922, 0.325490196}
+\definecolor{green}{rgb}{0.0, 0.4, 0.0}
+%\definecolor{green}{rgb}{0.0,0.4,0.0};
 \DeclareCaptionFont{myred}{red}
 \captionsetup{font=scriptsize,labelfont=scriptsize,labelfont={color=red,bf}}
 % -----------------------------------------
@@ -38,9 +38,9 @@
 % -----------------------------------------
 
 \setbeamertemplate{frametitle} {
-\begin{centering}
-\vspace{0.1in} \insertframetitle
-\par
+	\begin{centering}
+		\vspace{0.1in} \insertframetitle
+		\par
 \end{centering}}
 
 
@@ -51,9 +51,16 @@
 \setbeamercolor*{item}{fg=red}
 \setbeamercolor{frametitle}{fg=red,bg=red}
 \setbeamercolor{title}{fg=red}
-\setbeamertemplate{enumerate items}{$\blacktriangleright$}
+\setbeamertemplate{enumerate items}{$\bullet$}
 \setbeamertemplate{enumerate subitems}{$\blacktriangleright$}
 \newtheorem{proposition}[theorem]{\textcolor{red}{Proposition}}
+\newcommand{\light}[1]{\textcolor{gray}{#1}}
+\newcommand{\xdownarrow}[1]{%
+	{\left\downarrow\vbox to #1{}\right.\kern-\nulldelimiterspace}
+}
+\newcommand{\xuparrow}[1]{%
+	{\left\uparrow\vbox to #1{}\right.\kern-\nulldelimiterspace}
+}
 % -----------------------------------------
 % Number the slides
 % -----------------------------------------
@@ -76,11 +83,14 @@
 % Begin Document
 % -----------------------------------------
 
-\title{Monetary Policy in a Heterogeneous Currency Union}
-\date{October 11, 2019}
+\title{Title}
+\date{Date}
 \author{Daniele Caratelli}
 
+\newcommand\Fontvi{\fontsize{12}{11}\selectfont}
+
 \begin{document}
+
 
 \maketitle
 

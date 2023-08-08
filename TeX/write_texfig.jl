@@ -30,7 +30,7 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,ivert,fontsz,cap)
        write(fileID,"\\pgfplotsset{y tick label style={  font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*", /pgf/number format/precision=3,/pgf/number format/fixed}};\n");
        write(fileID,"\\pgfplotsset{y label style={  font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*"}};\n");
        write(fileID,"\\pgfplotsset{x label style={  font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*"}};\n");
-       write(fileID,"\\begin{groupplot}[group style={group name=allgraphs, group size= "*string(cs)*" by "*string(cs)*", vertical sep=3cm, horizontal sep=2.5cm}, height = "*string(specs["height"])*"cm, width = "*string(specs["width"])*"cm];\n");
+       write(fileID,"\\begin{groupplot}[xtick pos=left, ytick pos=left, group style={group name=allgraphs, group size= "*string(cs)*" by "*string(cs)*", vertical sep=3cm, horizontal sep=2.5cm}, height = "*string(specs["height"])*"cm, width = "*string(specs["width"])*"cm];\n");
        #individual plots
        for i=1:num_plots
            A = F[i]; #ith figure
@@ -38,7 +38,11 @@ function write_texfig(F,filename,rs,cs,specs,scale,izero,ivert,fontsz,cap)
            if isnothing(specs["xmax"]); xmax = A[end,1]; else; xmax = specs["xmax"]; end;
            write(fileID,"\\pgfmathsetmacro{\\xmin}{"*string(xmin)*"};\n");
            write(fileID,"\\pgfmathsetmacro{\\xmax}{"*string(xmax)*"};\n");
-           write(fileID,"\\nextgroupplot[ylabel={"*specs["ylabs"][i]*"}, xlabel={"*specs["xlabs"][i]*"},
+           write(fileID,"\\nextgroupplot[")
+           if haskey(specs,"xtick")
+                write(fileID,"unbounded coords=jump, xtick={" * specs["xtick"] * "}, xticklabels={" * specs["xticklabels"] * "},");
+           end
+           write(fileID,"ylabel={"*specs["ylabs"][i]*"}, xlabel={"*specs["xlabs"][i]*"},
                 xmin=\\xmin, xmax=\\xmax, tick label style={/pgf/number format/fixed},
                 legend style={draw=none}, legend style={legend pos=south east},
                 legend columns=1,font=\\fontsize{"*string(fontsz)*"}{0}\\selectfont"*"];\n");
